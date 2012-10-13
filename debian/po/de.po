@@ -1,0 +1,86 @@
+# translation of po-debconf template to German
+# This file is distributed under the same license as the thruk package.
+#
+# Copyright ©:
+# Matthias Julius <mdeb@julius-net.net>, 2006, 2010.
+msgid ""
+msgstr ""
+"Project-Id-Version: thruk 1.0.1-3\n"
+"Report-Msgid-Bugs-To: thruk@packages.debian.org\n"
+"POT-Creation-Date: 2012-10-14 15:22+0200\n"
+"PO-Revision-Date: 2010-05-20 00:04-0400\n"
+"Last-Translator: Matthias Julius <mdeb@julius-net.net>\n"
+"Language-Team: German <debian-l10n-german@lists.debian.org>\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Lokalize 1.0\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid "Thruk web administration password:"
+msgstr "Passwort für die Web-Administration von Thruk:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid "Please provide the password to be created with the \"thrukadmin\" user."
+msgstr "Bitte geben Sie das Passwort für den Benutzer »thrukadmin« ein."
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid ""
+"This is the username and password to use when connecting to the Thruk server "
+"after completing the configuration. If you do not provide a password, you "
+"will have to configure access to Thruk manually later on."
+msgstr ""
+"Dies sind Benutzername und Passwort zur Anmeldung beim Thruk-Server nach "
+"dessen Einrichtung. Falls Sie kein Passwort eingeben, müssen Sie den Zugang "
+"zu Thruk manuell einrichten."
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid "Re-enter password to verify:"
+msgstr "Passwort nochmal eingeben:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid ""
+"Please enter the same user password again to verify you have typed it "
+"correctly."
+msgstr "Bitte geben Sie dasselbe Passwort zur Überprüfung erneut ein."
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "Password input error"
+msgstr "Fehler bei der Passworteingabe"
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "The two passwords you entered were not the same. Please try again."
+msgstr ""
+"Die beiden Passwörter, die Sie eingegeben haben, sind nicht gleich. Bitte "
+"versuchen Sie es noch einmal."
+
+#~ msgid "Apache servers to configure for thruk:"
+#~ msgstr "Für Thruk einzurichtende Apache-Server:"
+
+#~ msgid "Please select which Apache servers should be configured for thruk."
+#~ msgstr ""
+#~ "Bitte wählen Sie, welche Apache-Server für Thruk eingerichtet werden "
+#~ "sollen."
+
+#~ msgid ""
+#~ "If you would prefer to perform configuration manually, leave all servers "
+#~ "unselected."
+#~ msgstr ""
+#~ "Falls Sie es vorziehen, die Einrichtung manuell durchzuführen, wählen Sie "
+#~ "keine Server aus."

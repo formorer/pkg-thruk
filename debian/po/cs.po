@@ -1,0 +1,117 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the thruk package.
+# Martin Sin <martin.sin@zshk.cz>, 2006.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: thruk 2.4-1\n"
+"Report-Msgid-Bugs-To: thruk@packages.debian.org\n"
+"POT-Creation-Date: 2012-10-14 15:22+0200\n"
+"PO-Revision-Date: 2010-05-06 10:22+0200\n"
+"Last-Translator: Martin Sin <martin.sin@zshk.cz>\n"
+"Language-Team: Czech <debian-l10n-czech@lists.debian.org>\n"
+"Language: cs\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid "Thruk web administration password:"
+msgstr "Heslo webové administrace Thruk:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid "Please provide the password to be created with the \"thrukadmin\" user."
+msgstr ""
+"Zadejte prosím heslo použité pro nově vytvořeného uživatele \"thrukadmin\"."
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid ""
+"This is the username and password to use when connecting to the Thruk server "
+"after completing the configuration. If you do not provide a password, you "
+"will have to configure access to Thruk manually later on."
+msgstr ""
+"Toto uživatelské jméno a heslo se používá pro připojení k serveru Thruk. "
+"Pokud nezadáte nějaké heslo, budete muset nastavit přístup k Thruk ručně."
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid "Re-enter password to verify:"
+msgstr "Potvrďte heslo pro ověření:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid ""
+"Please enter the same user password again to verify you have typed it "
+"correctly."
+msgstr "Zadejte prosím stejné heslo znovu pro ověření, že je zadané správně."
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "Password input error"
+msgstr "Chyba zadání hesla"
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "The two passwords you entered were not the same. Please try again."
+msgstr "Zadaná hesla nesouhlasí. Zkuste to prosím znovu."
+
+#~ msgid "Apache servers to configure for thruk:"
+#~ msgstr "Servery Apache pro nastavení s thruk:"
+
+#~ msgid "Please select which Apache servers should be configured for thruk."
+#~ msgstr "Vyberte prosím, které servery Apache nastavit pro použití s thruk."
+
+#~ msgid ""
+#~ "If you would prefer to perform configuration manually, leave all servers "
+#~ "unselected."
+#~ msgstr "Pokud dáváte přednost ruční konfiguraci, nevybírejte žádné servery."
+
+#~ msgid "Password confirmation:"
+#~ msgstr "Potvrzení hesla:"
+
+#~ msgid "The passwords do not match"
+#~ msgstr "Hesla nesouhlasí"
+
+#, fuzzy
+#~| msgid "Enable support for nagios 1.x links in thruk?"
+#~ msgid "Enable support for nagios 1.x links in nagios3?"
+#~ msgstr "Povolit podporu odkazů nagios 1.x v thruk?"
+
+#, fuzzy
+#~| msgid ""
+#~| "Please choose whether the Apache configuration for thruk should provide "
+#~| "compatibility with links from nagios 1.x."
+#~ msgid ""
+#~ "Please choose whether the Apache configuration for nagios3 should provide "
+#~ "compatibility with links from nagios 1.x."
+#~ msgstr ""
+#~ "Vyberte si prosím, zda má konfigurace Apache pro thruk poskytovat "
+#~ "kompatibilitu s odkazy z nagios 1.x."
+
+#~ msgid ""
+#~ "If you select this option, the apache configuration used for nagios will "
+#~ "include directives to support URLs from nagios 1.x. You should not choose "
+#~ "this option if you still have nagios 1.x on your system, or unpredictable "
+#~ "results may occur."
+#~ msgstr ""
+#~ "Pokud zvolíte tuto možnost, konfigurace apache použitá pro nagios bude "
+#~ "obsahovat příkazy pro podporu URL adres známých z nagios 1.x. Tuto volbu "
+#~ "byste neměli volit v případě, že máte dosud nainstalován nagios 1.x. "
+#~ "Jinak může dojít k neočekávaným výsledkům."
+
+#~ msgid "apache2"
+#~ msgstr "apache2"
+
+#~ msgid "false"
+#~ msgstr "chybné"

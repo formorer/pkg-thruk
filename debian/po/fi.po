@@ -1,0 +1,123 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: thruk\n"
+"Report-Msgid-Bugs-To: thruk@packages.debian.org\n"
+"POT-Creation-Date: 2012-10-14 15:22+0200\n"
+"PO-Revision-Date: \n"
+"Last-Translator: Esko Arajärvi <edu@iki.fi>\n"
+"Language-Team: Finnish <debian-l10n-finnish@lists.debian.org>\n"
+"Language: fi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Poedit-Language: Finnish\n"
+"X-Poedit-Country: FINLAND\n"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+#, fuzzy
+#| msgid "Nagios web administration password:"
+msgid "Thruk web administration password:"
+msgstr "Nagios-verkkoylläpidon salasana:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+#, fuzzy
+#| msgid ""
+#| "Please provide the password to be created with the \"nagiosadmin\" user."
+msgid "Please provide the password to be created with the \"thrukadmin\" user."
+msgstr "Anna salasana käyttäjätunnukselle ”nagiosadmin”."
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+#, fuzzy
+#| msgid ""
+#| "This is the username and password you will use to log in to your nagios "
+#| "installation after configuration is complete.  If you do not provide a "
+#| "password, you will have to configure access to nagios yourself."
+msgid ""
+"This is the username and password to use when connecting to the Thruk server "
+"after completing the configuration. If you do not provide a password, you "
+"will have to configure access to Thruk manually later on."
+msgstr ""
+"Tämän käyttäjätunnuksen ja salasanan avulla voidaan nagios-asennukseen "
+"kirjautua, kun asetusten muokkaus on päättynyt. Jos salasanaa ei anneta, "
+"täytyy nagiokseen pääsy asettaa käsin."
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid "Re-enter password to verify:"
+msgstr ""
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid ""
+"Please enter the same user password again to verify you have typed it "
+"correctly."
+msgstr ""
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "Password input error"
+msgstr ""
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "The two passwords you entered were not the same. Please try again."
+msgstr ""
+
+#, fuzzy
+#~| msgid "Apache servers to configure for thruk:"
+#~ msgid "Apache servers to configure for thruk:"
+#~ msgstr "Apache-palvelimet, joiden asetuksia muokataan thruk:a varten:"
+
+#, fuzzy
+#~| msgid "Please select which apache servers should be configured for thruk."
+#~ msgid "Please select which Apache servers should be configured for thruk."
+#~ msgstr ""
+#~ "Valitse minkä Apache-palvelimien asetuksia tulisi muokata thruk:n "
+#~ "käyttöönottamiseksi."
+
+#~ msgid ""
+#~ "If you would prefer to perform configuration manually, leave all servers "
+#~ "unselected."
+#~ msgstr "Jos haluat tehdä asetukset käsin, älä valitse mitään palvelinta."
+
+#~ msgid "Password confirmation:"
+#~ msgstr "Salasanan vahvistus:"
+
+#~ msgid "The passwords do not match"
+#~ msgstr "Salasanat eivät täsmää."
+
+#, fuzzy
+#~| msgid "Enable support for nagios 1.x links in thruk?"
+#~ msgid "Enable support for nagios 1.x links in nagios3?"
+#~ msgstr "Otetaanko nagiosin version 1.x linkkien tuki käyttöön thruk:ssa?"
+
+#, fuzzy
+#~| msgid ""
+#~| "Please choose whether the Apache configuration for thruk should provide "
+#~| "compatibility with links from nagios 1.x."
+#~ msgid ""
+#~ "Please choose whether the Apache configuration for nagios3 should provide "
+#~ "compatibility with links from nagios 1.x."
+#~ msgstr ""
+#~ "Valitse tulisiko thruk:n Apache-asetusten olla yhteensopivia nagios 1.x:n "
+#~ "linkkien kanssa."
+
+#~ msgid ""
+#~ "If you select this option, the apache configuration used for nagios will "
+#~ "include directives to support URLs from nagios 1.x. You should not choose "
+#~ "this option if you still have nagios 1.x on your system, or unpredictable "
+#~ "results may occur."
+#~ msgstr ""
+#~ "Jos valitset tämän, Apachen nagios-asetuksiin sisällytetään tuki nagios 1."
+#~ "x:n URLeille. Tätä ei tulisi valita, jos järjestelmässä on edelleen "
+#~ "nagios 1.x asennettuna, koska seuraukset eivät ole ennustettavissa."

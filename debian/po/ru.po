@@ -1,0 +1,82 @@
+# translation of ru.po to Russian
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+#
+# Yuri Kozlov <kozlov.y@gmail.com>, 2008.
+# Yuri Kozlov <yuray@komyakino.ru>, 2010.
+msgid ""
+msgstr ""
+"Project-Id-Version: thruk 1.0.1-3\n"
+"Report-Msgid-Bugs-To: thruk@packages.debian.org\n"
+"POT-Creation-Date: 2012-10-14 15:22+0200\n"
+"PO-Revision-Date: 2010-05-08 15:44+0400\n"
+"Last-Translator: Yuri Kozlov <yuray@komyakino.ru>\n"
+"Language-Team: Russian <debian-l10n-russian@lists.debian.org>\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: KBabel 1.11.4\n"
+"Plural-Forms:  nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
+"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid "Thruk web administration password:"
+msgstr "Пароль для веб-администрирования thruk:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid "Please provide the password to be created with the \"thrukadmin\" user."
+msgstr "Введите пароль для создаваемой учётной записи \"thrukadmin\"."
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid ""
+"This is the username and password to use when connecting to the Thruk server "
+"after completing the configuration. If you do not provide a password, you "
+"will have to configure access to Thruk manually later on."
+msgstr ""
+"Эта учётная запись и пароль будут использованы для доступа к серверу Thruk "
+"после завершения настройки. Если вы не укажите пароль, то вам нужно будет "
+"настроить доступ к Thruk самостоятельно."
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid "Re-enter password to verify:"
+msgstr "Введите пароль ещё раз для проверки:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid ""
+"Please enter the same user password again to verify you have typed it "
+"correctly."
+msgstr "Введите тот же пароль пользователя для проверки правильности ввода."
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "Password input error"
+msgstr "Ошибка ввода пароля"
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "The two passwords you entered were not the same. Please try again."
+msgstr "Введённые пароли не совпали. Попробуйте ещё раз."
+
+#~ msgid "Apache servers to configure for thruk:"
+#~ msgstr "Серверы apache для настройки под thruk:"
+
+#~ msgid "Please select which Apache servers should be configured for thruk."
+#~ msgstr "Выберите серверы Apache, которые нужно настроить для thruk."
+
+#~ msgid ""
+#~ "If you would prefer to perform configuration manually, leave all servers "
+#~ "unselected."
+#~ msgstr "Если вы хотите выполнить настройку вручную, то ничего не выбирайте."

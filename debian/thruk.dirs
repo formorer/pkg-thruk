@@ -1,0 +1,8 @@
+etc/thruk/ssi
+etc/apache2/conf.d/
+usr/share/thruk
+var/lib/thruk
+var/cache/thruk
+var/log/thruk
+etc/thruk/themes/themes-available
+etc/thruk/plugins/plugins-available

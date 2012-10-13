@@ -1,0 +1,80 @@
+# Japanese debconf templates translation for thruk.
+# Copyright (C) 2007-2010 Debian Nagios Maintainer Group <pkg-nagios-devel@lists.alioth.debian.org>
+# This file is distributed under the same license as the thruk package.
+# Noritada Kobayashi, 2007
+# Hideki Yamane <henrich@debian.org>, 2010
+msgid ""
+msgstr ""
+"Project-Id-Version: thruk (debconf) 1.0.2-1\n"
+"Report-Msgid-Bugs-To: thruk@packages.debian.org\n"
+"POT-Creation-Date: 2012-10-14 15:22+0200\n"
+"PO-Revision-Date: 2010-09-16 01:10+0900\n"
+"Last-Translator: Hideki Yamane <henrich@debian.org>\n"
+"Language-Team: Japanese <debian-japanese@lists.debian.org>\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid "Thruk web administration password:"
+msgstr "Thruk ウェブ管理用パスワード:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid "Please provide the password to be created with the \"thrukadmin\" user."
+msgstr "「thrukadmin」ユーザ用に作成するパスワードを入力してください。"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid ""
+"This is the username and password to use when connecting to the Thruk server "
+"after completing the configuration. If you do not provide a password, you "
+"will have to configure access to Thruk manually later on."
+msgstr ""
+"これは、設定完了後に Thruk サーバに接続時に使用するユーザ名とパスワードです。"
+"ここでパスワードを入力しない場合は、後ほど手動で Thruk へのアクセスを設定しな"
+"ければなりません。"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid "Re-enter password to verify:"
+msgstr "確認のためパスワードの再入力:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid ""
+"Please enter the same user password again to verify you have typed it "
+"correctly."
+msgstr ""
+"入力が正しいことを確認するため、再度同じユーザパスワードを入力してください。"
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "Password input error"
+msgstr "パスワード入力エラー"
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "The two passwords you entered were not the same. Please try again."
+msgstr "入力された 2 つのパスワードが一致しません。もう一度入力してください。"
+
+#~ msgid "Apache servers to configure for thruk:"
+#~ msgstr "thruk の設定をする Apache サーバ:"
+
+#~ msgid "Please select which Apache servers should be configured for thruk."
+#~ msgstr "thruk の設定をする Apache サーバを選択してください。"
+
+#~ msgid ""
+#~ "If you would prefer to perform configuration manually, leave all servers "
+#~ "unselected."
+#~ msgstr ""
+#~ "手動で設定を行う方がよい場合は、どのサーバも選択せずに次に進んでください。"

@@ -1,0 +1,20 @@
+Template: thruk/adminpassword
+Type: password
+_Description: Thruk web administration password:
+ Please provide the password to be created with the "thrukadmin" user.
+ .
+ This is the username and password to use when connecting to the Thruk
+ server after completing the configuration. If you do not provide
+ a password, you will have to configure access to Thruk manually
+ later on.
+
+Template: thruk/adminpassword-repeat
+Type: password
+_Description: Re-enter password to verify:
+ Please enter the same user password again to verify you have typed it
+ correctly.
+
+Template: thruk/adminpassword-mismatch
+Type: error
+_Description: Password input error
+ The two passwords you entered were not the same. Please try again.

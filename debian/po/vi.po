@@ -1,0 +1,80 @@
+# Vietnamese translation for Thruk.
+# Copyright © 2010 Free Software Foundation, Inc.
+# Clytie Siddall <clytie@riverland.net.au>, 2010.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: thruk 1.0.1-3\n"
+"Report-Msgid-Bugs-To: thruk@packages.debian.org\n"
+"POT-Creation-Date: 2012-10-14 15:22+0200\n"
+"PO-Revision-Date: 2010-05-13 23:02+0930\n"
+"Last-Translator: Clytie Siddall <clytie@riverland.net.au>\n"
+"Language-Team: Vietnamese <vi-VN@googlegroups.com>\n"
+"Language: vi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Generator: LocFactoryEditor 1.8\n"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid "Thruk web administration password:"
+msgstr "Mật khẩu quản trị Web Thruk:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid "Please provide the password to be created with the \"thrukadmin\" user."
+msgstr "Hãy cung cấp mật khẩu cần tạo với người dùng quản trị « thrukadmin »."
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid ""
+"This is the username and password to use when connecting to the Thruk server "
+"after completing the configuration. If you do not provide a password, you "
+"will have to configure access to Thruk manually later on."
+msgstr ""
+"Đây là tên người dùng và mật khẩu cần dùng khi kết nối đến máy phục vụ Thruk "
+"sau khi hoàn tất cấu hình. Không cung cấp mật khẩu thì bạn cần phải tự cấu "
+"hình chức năng truy cập đến Thruk về sau."
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid "Re-enter password to verify:"
+msgstr "Gõ lại mật khẩu để thẩm tra:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid ""
+"Please enter the same user password again to verify you have typed it "
+"correctly."
+msgstr "Hãy nhập lại mật khầu người dùng mới nhập, để xác nhận bạn đã gõ đúng."
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "Password input error"
+msgstr "Lỗi nhập mật khẩu"
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "The two passwords you entered were not the same. Please try again."
+msgstr "Bạn đã nhập hai mật khẩu không trùng nhau. Hãy thử lại."
+
+#~ msgid "Apache servers to configure for thruk:"
+#~ msgstr "Trình phục vụ Apache cần cấu hình cho thruk:"
+
+#~ msgid "Please select which Apache servers should be configured for thruk."
+#~ msgstr "Hãy chọn những trình phục vụ Apache nào cần cấu hình cho thruk."
+
+#~ msgid ""
+#~ "If you would prefer to perform configuration manually, leave all servers "
+#~ "unselected."
+#~ msgstr ""
+#~ "Nếu bạn muốn tự cấu hình thì để lại tất cả các trình phục vụ bị bỏ chọn."

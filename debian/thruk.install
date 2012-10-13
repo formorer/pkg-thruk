@@ -1,0 +1,14 @@
+cgi.cfg etc/thruk
+dist.ini usr/share/thruk
+lib usr/share/thruk
+menu.conf usr/share/thruk
+plugins usr/share/thruk
+root usr/share/thruk
+script usr/share/thruk
+script/thruk usr/bin
+support/htpasswd etc/thruk
+support/menu_local.conf etc/thruk
+templates usr/share/thruk
+themes usr/share/thruk
+thruk.conf etc/thruk
+debian/default-plugins usr/share/thruk

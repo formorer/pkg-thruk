@@ -1,0 +1,109 @@
+# thruk po-debconf translation to spanish
+# Copyright (C) 2004-2010 Software in the Public Interest
+# This file is distributed under the same license as the thruk package.
+#
+# Changes:
+# - Initial translation
+#       Rudy Godoy <rudy@kernel-panik.org>, 2006
+# 	
+# - Updates
+# 	Omar Campagne <ocampagne@gmail.com>, 2010
+#
+#  Traductores, si no conoce el formato PO, merece la pena leer la
+#  documentación de gettext, especialmente las secciones dedicadas a este
+#  formato, por ejemplo ejecutando:
+#         info -n '(gettext)PO Files'
+#         info -n '(gettext)Header Entry'
+#
+# Equipo de traducción al español, por favor lean antes de traducir
+# los siguientes documentos:
+#
+# - El proyecto de traducción de Debian al español
+#   http://www.debian.org/intl/spanish/coordinacion
+#   especialmente las notas de traducción en
+#   http://www.debian.org/intl/spanish/notas
+#
+# - La guía de traducción de po's de debconf:
+#   /usr/share/doc/po-debconf/README-trans
+#   o http://www.debian.org/intl/l10n/po-debconf/README-trans
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: thruk 2.5\n"
+"Report-Msgid-Bugs-To: thruk@packages.debian.org\n"
+"POT-Creation-Date: 2012-10-14 15:22+0200\n"
+"PO-Revision-Date: 2010-05-06 18:43+0200\n"
+"Last-Translator: Omar Campagne <ocampagne@gmail.com>\n"
+"Language-Team: Debian l10n Spanish <debian-l10n-spanish@lists.debian.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"org>\n"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid "Thruk web administration password:"
+msgstr "Contraseña para la administración web de thruk:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid "Please provide the password to be created with the \"thrukadmin\" user."
+msgstr "Introduzca la contraseña para el nuevo usuario «thrukadmin»."
+
+#. Type: password
+#. Description
+#: ../thruk.templates:1001
+msgid ""
+"This is the username and password to use when connecting to the Thruk server "
+"after completing the configuration. If you do not provide a password, you "
+"will have to configure access to Thruk manually later on."
+msgstr ""
+"Estos son el usuario y contraseña que usará para identificarse en su "
+"instalación de thruk, una vez que la configuración se haya completado. Si no "
+"define una contraseña tendrá que configurar thruk de forma manual."
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid "Re-enter password to verify:"
+msgstr "Introduzca la contraseña otra vez para su comprobación:"
+
+#. Type: password
+#. Description
+#: ../thruk.templates:2001
+msgid ""
+"Please enter the same user password again to verify you have typed it "
+"correctly."
+msgstr ""
+"Introduzca otra vez la misma contraseña de usuario para comprobar que la ha "
+"tecleado correctamente."
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "Password input error"
+msgstr "Se ha detectado un fallo al introducir la contraseña"
+
+#. Type: error
+#. Description
+#: ../thruk.templates:3001
+msgid "The two passwords you entered were not the same. Please try again."
+msgstr ""
+"Las dos contraseñas que ha introducido no son idénticas. Inténtelo otra vez."
+
+#~ msgid "Apache servers to configure for thruk:"
+#~ msgstr "Servidores apache a configurar para thruk:"
+
+#~ msgid "Please select which Apache servers should be configured for thruk."
+#~ msgstr ""
+#~ "Seleccione los servidores apache que se deberían configurar para thruk."
+
+#~ msgid ""
+#~ "If you would prefer to perform configuration manually, leave all servers "
+#~ "unselected."
+#~ msgstr ""
+#~ "No elija ningún servidor si prefiere realizar la configuración de forma "
+#~ "manual."
