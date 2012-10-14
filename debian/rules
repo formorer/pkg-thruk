@@ -51,3 +51,7 @@ override_dh_install:
 	rm -rf $b/usr/share/thruk/themes/themes-enabled
 	#use debian packages mootools
 	rm $b/usr/share/thruk/themes/themes-available/Vautour/js/mootools.js
+	rm $b/usr/share/thruk/plugins/plugins-available/dashboard/root/thruk/images/licence.txt
+	rm $b/usr/share/thruk/plugins/plugins-available/panorama/root/extjs-4.1.1/license.txt
+	rm $b/usr/share/thruk/themes/themes-available/Nuvola/license.txt
+
