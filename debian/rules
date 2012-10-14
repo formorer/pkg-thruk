@@ -49,3 +49,5 @@ override_dh_install:
 		done
 	rm -rf $b/usr/share/thruk/plugins/plugins-enabled
 	rm -rf $b/usr/share/thruk/themes/themes-enabled
+	#use debian packages mootools
+	rm $b/usr/share/thruk/themes/themes-available/Vautour/js/mootools.js
