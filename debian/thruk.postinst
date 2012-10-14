@@ -42,6 +42,8 @@ case "$1" in
         setperm www-data www-data 0755 /var/lib/thruk
         setperm www-data www-data 0755 /var/cache/thruk
         setperm www-data www-data 0755 /var/log/thruk
+        setperm root www-data 0664 /etc/thruk/thruk_local.conf
+        setperm root www-data 0664 /etc/thruk/cgi.cfg
 
         shopt -s nullglob
         for dir in plugins themes
@@ -49,6 +51,7 @@ case "$1" in
             if [ ! -d /etc/thruk/${dir}/${dir}-enabled ]
             then
                 mkdir /etc/thruk/${dir}/${dir}-enabled
+                setperm root www-data 2775 /etc/thruk/plugins/plugins-enabled
                 for link in /etc/thruk/${dir}/${dir}-available/*
                 do
                     if [ -e /usr/share/thruk/default-${dir} ]
