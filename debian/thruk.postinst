@@ -67,9 +67,9 @@ case "$1" in
         done
 
         # create empty crontab for www-data
-        /usr/bin/crontab -l -u www-data 2>/dev/null | /usr/bin/crontab -u www-data -
+        crontab -l -u www-data 2>/dev/null | crontab -u www-data -
         # install thruk crontab 
-        /usr/bin/thruk -a installcron --local
+        thruk -a installcron --local
 
         db_get thruk/adminpassword
         admpass="$RET"
