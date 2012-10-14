@@ -66,6 +66,8 @@ case "$1" in
             fi
         done
 
+        # create empty crontab for www-data
+        /usr/bin/crontab -l -u www-data 2>/dev/null | /usr/bin/crontab -u www-data -
         # install thruk crontab 
         /usr/bin/thruk -a installcron --local
 
