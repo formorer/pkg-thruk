@@ -50,7 +50,7 @@ License: GPL-2+
  License version 2 can be found in the file
  `/usr/share/common-licenses/GPL-2'.
 
-Files: **/{server.png,server_ack.png,server_downtime.png,server_error.png,server_ok.png,server_unknown.png,server_warning.png,hostgroup.png}
+Files: **/{server.png server_ack.png server_downtime.png server_error.png server_ok.png server_unknown.png server_warning.png hostgroup.png}
 Copyright: Erwan SEITE (SIGMA Informatique), George Boukeas, original Gorilla icon theme artwork by Jakub Steiner
 License: CC-BY-SA 3.0
  THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
@@ -64,7 +64,7 @@ License: CC-BY-SA 3.0
  CONTAINED HERE IN CONSIDERATION OF YOUR ACCEPTANCE OF SUCH TERMS AND
  CONDITIONS.
 
-Files: **/{servicegroup.png, dashboard.png}
+Files: **/{servicegroup.png dashboard.png}
 Copyright: Erwan SEITE (SIGMA Informatique), based on the work by Everaldo Coelho (Crystal Project Icons)
 License: LGPL
  Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>
