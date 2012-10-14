@@ -1,0 +1,224 @@
+Frequently Asked Questions
+==========================
+
+== General
+
+=== Is Thruk an Abbreviation? What does Thruk mean?
+
+Thruk is just a random word and has no meaning. Pronounce it like 'Truck'.
+
+
+=== Where is the statusmap?
+
+The statusmap got replaced by a own variant which is more scalable in
+large environments. Its shipped as Thruk addon, but enabled by
+default. See the http://thruk.org/plugins.html[plugins page] for details and screenshots.
+
+
+=== Authorization/Authentication is not working
+
+Authentication is done by the webserver, so authentication is only available
+with the fastcgi version.
+
+
+=== All dates and times are displayed with the wrong timezone
+
+Try to set the use_timezone configuration option in your
+thruk_local.conf
+
+
+
+== Usage
+
+=== How do i select hosts/services on the status page?
+
+Just click on the empty table row when the row is highlighted. This only works
+if you do not click on a link.
+
+
+== Where can i see the full command line for a host or servicecheck?
+
+You have to enable the option 'set show_full_commandline'. It's
+disabled for security reasons by default. So be careful to not display
+any passwords though the webinterface.
+
+
+
+
+== Customization
+
+=== How to change the side menu
+The main left menu is highly editable through menu_local.conf. It is
+recommended apply changes only to your menu_local.conf in order to
+avoid conflicts on updating Thruk.
+
+Open your menu_local.conf (create one if it does not exists) with your
+preferred text editor and check the config. You can add new sections
+with:
+
+....
+add_section('name' => 'General');
+....
+
+To add a new link use the following syntax:
+
+....
+add_link('name' => 'Home', 'href' => '/thruk/main.html');
+....
+
+.Available parameters
+* name: This is how the link is called in the web front end.
+* href: This is the destination link optional you can add.
+* target: If Link shall open in a new window.
+* icon: Used for themes which support icons.
+
+Then the config looks like this:
+
+....
+add_link('name' => 'Nagios, 'href' => '/nagios', 'target' => '_new');
+....
+
+
+You can include the main menu config with the perl do statement.
+Ex.: If you just want to add a new link to your config menu, your
+menu_local.conf could look like this:
+
+....
+do $ENV{'OMD_ROOT'}.'/share/thruk/menu.conf';
+add_link('name' => 'Wato', 'href' => '/'.$ENV{'OMD_SITE'}.'/check_mk/wato.py?filename=wato.mk');
+....
+
+This example just puts the Wato link from check_mks Multisite in your
+config section. Replace the ENV part with a proper path if you do not
+use http://omdistro.org[OMD].
+
+
+Adding Items to existing sections can also be achieved by
+'insert_item':
+....
+insert_item('General', { 'href' => 'http://your-company.com', 'name' => 'Company' });
+....
+
+
+Existing Items can be removed with the 'remove_item' function:
+....
+remove_item('Reports', 'Availability');
+....
+
+
+=== How can i integrate Nagvis Maps
+Integrating Nagivs is currently only possible when frames are enabled.
+So first step is editing the thruk_local.conf and set
+....
+ use_frames = 1
+....
+
+Integration is easy. Just copy and edit your menu_local.conf.
+For Nagvis 1.4 add something like:
+....
+ add_section('name' => 'Nagvis');
+ add_link('name' => "Nagvis",        'href' => '/nagvis/frontend/nagvis-js/index.php');
+ add_sub_link('name' => "demo",      'href' => '/nagvis/index.php?Map=demo');
+ add_sub_link('name' => "demo-map2", 'href' => '/nagvis/index.php?Map=demo-map2');
+....
+
+For Nagvis 1.5:
+....
+add_section('name' => 'Nagvis');
+add_link('name' => "Nagvis",         'href' => '/nagvis/frontend/nagvis-js/index.php');
+add_sub_link('name' => "demo",       'href' => '/nagvis/frontend/nagvis-js/index.php?mod=Map&act=view&show=demo');
+add_sub_link('name' => "demo-map2",  'href' => '/nagvis/frontend/nagvis-js/index.php?mod=Map&act=view&show=demo-map2');
+....
+Thruk has to be restarted.
+
+
+=== How can i add more themes?
+
+Themes are located under 'themes'. Just copy and modify the one you
+like. See the http://thruk.org/themes.html[themes page] for details.
+
+
+=== How can i disable themes?
+
+Themes can be disabled by removing the symlink from your
+'themes/themes-enabled' directory.
+See the http://thruk.org/themes.html[themes page] for details.
+
+
+
+== Installation
+
+=== Is it possible to operate Thruk in a cluster?
+Yes, just put a load balancer before 2 (or more) Thruk installations
+and make sure the 'var' directory is shared between all instances ( by
+NFS, DRBD or similar ). There is usually not much traffic in this
+folder.
+
+
+=== How can i enable debug mode?
+==== Thruk Server
+For a quick test without authorization, you can start the thruk server
+with './script/thruk_server.pl -d'. Make sure your log4perl.conf has
+DEBUG theshold configured. You can also move your log4perl.conf away,
+so all debug output will be sent to the terminal.
+
+==== FastCGI Server
+This is a bit more complicate.
+First you have to enable debuging for your thruk application.
+Add '-Debug' to the use Catalyst in your lib/Thruk.pm. The part
+should look like this:
+------------------
+  use Catalyst qw/
+                -Debug
+                Unicode::Encoding
+                Authentication
+                Authorization::ThrukRoles
+                CustomErrorMessage
+                ConfigLoader
+                StackTrace
+                Static::Simple
+                Redirect
+                Compress::Gzip
+                /;
+  our $VERSION = '0.60';
+------------------
+
+Then make sure you have a log4perl.conf with DEBUG threshold configured.
+Finally restart your fastcgi server.
+
+
+== Errors
+=== Backend not available
+
+The socat solution for using livestatus with SSL does not longer work
+due to problems with socat and json data. If you see errors like:
+
+------------------
+[ERROR][Thruk.Controller.Root] Caught exception in Thruk::Controller::status->index "socket error at thruk/script/../lib/Monitoring/Livestatus/Class/Base/Table.pm line 186"
+[ERROR][Thruk.Controller.error] internal server error
+------------------
+
+and you use socat for livestatus over ssl, please change to stunnel or
+ssh with the normal xinetd solution.
+
+=== undefined symbol: Perl_Istack_sp_ptr
+
+You will get perl errors about undefined symbols when you try to
+install a debian package on ubuntu or a ubuntu 11 deb file on ubuntu
+12 or any package on a different platform than the package was build
+for.
+
+------------------
+/usr/bin/perl: symbol lookup error: /usr/lib/thruk/perl5/x86_64-linux-gnu-thread-multi/auto/List/Util/Util.so: undefined symbol: Perl_Istack_sp_ptr
+------------------
+
+The solution is simple, use the right package or source installation
+if no package is available for your platform.
+
+
+=== Broken PDF Reports in Centos/Rhel 5
+
+PDF reports won't work with libcairo < 1.8.8. Therefor you may use the
+prepared packages for cairo 1.8.8 on rhel/centos 5 on the
+http://thruk.org/download.html[download
+page].

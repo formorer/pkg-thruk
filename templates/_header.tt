@@ -1,0 +1,217 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+  "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=8"/>
+    <title>[% title_prefix %][% title %]</title>
+    <link rel="shortcut icon" href="[% url_prefix %]thruk/themes/[% theme %]/images/favicon.ico" type="image/ico" />
+
+    [% SET page = 'status' IF page == '' %]
+
+    <!-- stylesheets -->
+    [%+ PROCESS _common_css.tt %]
+
+    <!-- javascript -->
+    [% PROCESS _common_js.tt %]
+    [% FOREACH j = js.list %]
+      <script type="text/javascript" src="[% url_prefix _ j %]"></script>
+    [% END %]
+    <script type="text/javascript">
+    <!--
+      var ajax_search_enabled     = '[% use_ajax_search %]';
+      var backend_chooser         = '[% backend_chooser %]';
+      [% IF refresh_rate +%]
+      var refresh_rate            = [% refresh_rate %];
+      [% END +%]
+      [% PROCESS _header_initial_states.tt %]
+      /* create clone */
+      var current_backend_states  = jQuery.extend(true, {}, initial_backend_states);
+      var enable_shinken_features = [% enable_shinken_features %];
+      [% IF enable_shinken_features +%]
+      var priorities              = new Array('[% FOREACH prio = priorities.keys.sort.reverse %][% priorities.$prio %][% UNLESS loop.last %]', '[% END %][% END %]');
+      [% END +%]
+      [% IF thruk_debug +%]
+      var thruk_debug_js          = 1;
+      [% ELSE %]
+      var thruk_debug_js          = 0;
+      [% END +%]
+
+      [% IF original_url %]
+      var original_url = '[% original_url %]';
+      original_url     = original_url.replace(/&amp;/g, '&');
+      if (history.replaceState) {
+        history.replaceState({}, "", original_url);
+      }
+      [% END %]
+
+      init_page();
+    -->
+    </script>
+
+    [% IF show_nav_button && use_frames %]
+    <style type='text/css'>
+      body {
+        margin-left: 8px;
+      }
+    </style>
+    [% END %]
+
+    [% PROCESS extra_headers.tt %]
+    [% IF extra_header %][% extra_header %][% END %]
+  </head>
+
+  <body class='[% page %]' id='[% page %]' onLoad="bodyOnLoad([% IF refresh_rate %][% refresh_rate %][% END %])">
+  [% ssi_header %]
+  <div style="display:none;" id="search-results"></div>
+
+  <div class="pref_pane" id="pref_pane" style="display:none;">
+    <a href="#" onclick="toggleElement('pref_pane'); return false;"><img src="[% url_prefix %]thruk/themes/[% theme %]/images/icon_minimize.gif" class="pref_pane_button" border="0" alt="preferences" width="13" height="12"></a>
+    <form action="" method="GET">
+    <table class="pref_pane" border=1 width="470">
+      <tr>
+        <td>
+          <table width="450">
+            <tr>
+              <th width="100">Theme:</th>
+              <td>
+                <select name="theme" id="pref_theme">
+                  [% FOR t = themes %]
+                  <option value="[% t %]"[% IF t == theme %] selected[% END %]>[% t %]</option>
+                  [% END %]
+                </select>
+                <input type="button" name="submit" value="change" onClick="prefSubmit('[% escape_html(full_uri(c)) %]', '[% theme %]')">
+              </td>
+            </tr>
+          [% IF show_sounds %]
+            <tr>
+              <th>Sounds:</th>
+              <td>
+                [% IF has_cgi_sounds %]
+                <img src="[% url_prefix %]thruk/themes/[% theme %]/images/[% IF play_sounds %]sound_mute.png[% ELSE %]sound.png[% END %]" alt="[% IF play_sounds %]sound is on[% ELSE %]sound is off[% END %]" width=16 height=16 style="vertical-align:top;">
+                <input type="button" name="submit" value="[% IF play_sounds %]sound is on[% ELSE %]sound is off[% END %]" onClick="prefSubmitSound('[% escape_html(full_uri(c)) %]', '[% IF play_sounds %]off[% ELSE %]on[% END %]')">
+                [% ELSE %]
+                <img src="[% url_prefix %]thruk/themes/[% theme %]/images/sound_mute.png" alt="sound is disabled" width=16 height=16 style="vertical-align:top;">
+                <input type="button" name="submit" value="no sound files configured in cgi.cfg" disabled>
+                [% END %]
+              </td>
+            </tr>
+          [% END %]
+            <tr>
+              <th>Favicon:</th>
+              <td>
+                <img src="[% url_prefix %]thruk/themes/[% theme %]/images/[% IF fav_counter %]favicon_nocounter.png[% ELSE %]favicon_counter.png[% END %]" alt="[% IF fav_counter %]counter is on[% ELSE %]counter is off[% END %]" width=16 height=16 style="vertical-align:top;">
+                <input type="button" name="submit" value="[% IF fav_counter %]counter is on[% ELSE %]counter is off[% END %]" onClick="prefSubmitCounter('[% escape_html(full_uri(c)) %]', '[% IF fav_counter %]off[% ELSE %]on[% END %]')">
+                [% IF fav_counter %]
+                [% totals = set_favicon_counter(c) %]
+                <script type="text/javascript">
+                <!--
+                  [%+ IF totals.red > 0 && totals.yellow == 0 && totals.orange == 0 +%]
+                    updateFaviconCounter([% totals.red %], '#FF5B33');
+                  [%+ ELSIF totals.red == 0 && totals.yellow > 0 && totals.orange == 0 +%]
+                    updateFaviconCounter([% totals.yellow %], '#FFDE00');
+                  [%+ ELSIF totals.red == 0 && totals.yellow == 0 && totals.orange > 0 +%]
+                    updateFaviconCounter([% totals.orange %], '#FF9E00');
+                  [%+ ELSE +%]
+                    updateFaviconCounter([% totals.red + totals.yellow + totals.orange %], '#FF9E00');
+                  [%+ END +%]
+                -->
+                </script>
+                [% END %]
+              </td>
+            </tr>
+          [% IF c.config.exists('use_feature_reports') && c.config.use_feature_reports %]
+            <tr>
+              <th>Report:</th>
+              <td>
+                <img src="[% url_prefix %]thruk/themes/[% theme %]/images/email_attach.png" alt="configure e-mail report" width=16 height=16 style="vertical-align:top;">
+                <input type="button" name="submit" value="Create E-Mail Report for this Page" onClick="window.location='reports.cgi?action=edit&amp;report=new&amp;template=report_from_url.tt&amp;params.url=[% short_uri(c).replace('&amp;', '&') | uri %]'; return false;">
+              </td>
+            </tr>
+          [% END %]
+            <tr>
+              <th>Page Refresh:</th>
+              <td nowrap>
+              [% IF refresh_rate %]
+              <span id="refresh_rate">Update in [% refresh_rate %] seconds <input type="button" value="stop" onClick="stopRefresh()"></span>
+              [% ELSE %]
+              <span id='refresh_rate'>This page will not refresh automatically <input type='button' value='refresh now' onClick='window.location.reload(true)'></span>
+              [% END %]
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+    </form>
+  </div>
+  [% IF use_frames %]
+      [% IF reload_nav %]
+      <script type="text/javascript">
+      <!--
+      if(parent.frames[0] != null) {
+        parent.frames[0].location.reload();
+      }
+      -->
+      </script>
+      [% END %]
+  [% ELSE %]
+  <div id="navbar" class="navbar">
+    [% PROCESS side.tt %]
+  </div>
+  [% END %]
+  [% IF show_nav_button %]
+    [% UNLESS use_frames %]
+    <div class="hidenav clickable" onclick="window.location='[% short_uri(c, 'nav' => 0) %]'" title="hide navigation"></div>
+    [% ELSE %]
+    <div class="shownav clickable" onclick="window.location='[% short_uri(c, 'nav' => 1) %]'"></div>
+    [% END %]
+  [% END %]
+
+<!-- Produced by Thruk (http://www.thruk.org). Copyright (c) 2010-2012 Thruk Developer Team. Copyright (c) 2009 Nagios Core Development Team and Community Contributors. Copyright (c) 1999-2009 Ethan Galstad. -->
+<table border="0" cellpadding=0 cellspacing=0 class="top_nav">
+  <tr>
+    <td width="100%">
+      <table border=0 cellpadding=0 cellspacing=0>
+        <tr>
+          <td>
+          [% IF hide_backends_chooser == 0 && backends && backends.size > 1 %]
+          [% FOREACH pd IN backends %]
+          <div class='backend'>
+            [% SET name  = 'unknown'                                         %]
+            [% SET name = backend_detail.$pd.name IF backend_detail.$pd.name %]
+
+            [% SET class = 'button_peerDOWN'                                    %]
+            [% SET class = 'button_peerUP'  IF backend_detail.$pd.running       %]
+            [% SET class = 'button_peerDIS' IF backend_detail.$pd.disabled == 2 %][%# hidden by user #%]
+            [% SET class = 'button_peerHID' IF backend_detail.$pd.disabled == 3 %][%# hidden by backend param #%]
+            [% SET class = 'button_peerHID' IF param_backend && pd != param_backend %]
+            [% SET class = 'button_peerDIS' IF backend_detail.$pd.disabled == 6 %]
+            [% SET class = 'button_peerUP'  IF backend_detail.$pd.disabled == 7 %]
+            <input type="button" id='button_[% pd %]' class="[% class %]" value="[% name %]" title="[% IF backend_detail.$pd.last_error %][% escape_js(backend_detail.$pd.last_error) %][% ELSE %][% name %][% END %]" onMouseOver="button_over(this)" onMouseOut="button_out(this)" onClick="toggleBackend('[% pd %]')"[% IF backend_detail.$pd.disabled == 5 %] disabled[% END %]>
+          </div>
+          [% END %]
+          [% END %]
+          </td>
+        </tr>
+      </table>
+    </td>
+    <td class="hidden noprint" id="bug_report">
+      [% IF show_error_reports%]
+      <a href="#" id="bug_report-btnEl"><img src="[% url_prefix %]thruk/themes/[% theme %]/images/bug_error.png" class="top_bug_button noprint" alt="Send Bug Report" title="Send Bug Report"></a>
+      [% END %]
+    </td>
+    [% UNLESS minimal %]
+    <td>
+      <input type="image" src="[% url_prefix %]thruk/themes/[% theme %]/images/arrow_refresh.png" class="top_refresh_button noprint" onClick="refresh_button(this)" alt="refresh this page" title="refresh this page">
+    </td>
+    <td class="top_nav_pref">
+      <input type="button" class="top_nav_pref_button noprint" value="preferences" title="preferences" onMouseOver="button_over(this)" onMouseOut="button_out(this)" onClick="toggleElement('pref_pane'); return false;">
+    </td>
+    [% END %]
+  </tr>
+</table>
+[% UNLESS minimal %]
+[% IF show_top_pane %]
+<a href="#" onClick="toggleTopPane(); return false;"><img src="[% url_prefix %]thruk/themes/[% theme %]/images/icon_minimize.gif" class="btn_toggle_top_pane" id="btn_toggle_top_pane" alt="toggle header"></a>
+[% END %]
+[% END %]

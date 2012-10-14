@@ -1,0 +1,44 @@
+#!/bin/sh
+# make example work in test and prod env
+if [ -e '/usr/lib/thruk/perl5' -a -e '/etc/thruk'  ]; then
+    export PERL5LIB="/usr/share/thruk/lib:/usr/lib/thruk/perl5:$PERL5LIB"
+    export CATALYST_CONFIG='/etc/thruk';
+fi
+eval 'exec /usr/bin/perl -x $0 ${1+"$@"} ;'
+    if 0;
+
+#! -*- perl -*-
+# vim: expandtab:ts=4:sw=4:syntax=perl
+
+use strict;
+use warnings;
+use Thruk::Utils::CLI;
+my $cli   = Thruk::Utils::CLI->new;
+my $odb   = $cli->get_object_db();
+my $hosts = $odb->get_objects_by_type('host');
+printf("%-20s   %s\n", "Host", "File");
+print("===========================================================\n");
+for my $h (@{$hosts}) {
+    printf("%-20s - %s:%d\n", $h->get_primary_name(), $h->{'file'}->{'path'}, $h->{'line'});
+}
+exit 0;
+
+##############################################
+
+=head1 NAME
+
+list_hosts - Command Line Utility which lists hosts
+
+=head1 SYNOPSIS
+
+Usage: list_hosts
+
+=head1 DESCRIPTION
+
+This script lists all hosts
+
+=head1 AUTHOR
+
+2012, Sven Nierlein, <sven@nierlein.de>
+
+=cut

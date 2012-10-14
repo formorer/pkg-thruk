@@ -1,0 +1,31 @@
+<div id="options" data-role="page">
+  <div data-role="header">
+    <a href="#" data-icon="back" data-rel="back" id="button_options_back">Back</a>
+    <h1>[% title_prefix %]Options</h1>
+    <a href="#home" data-icon="check" class="ui-btn-right" id="options_save" data-direction="reverse">Save</a>
+  </div>
+  <div data-role="content">
+    <div data-role="fieldcontain" id="theme_chooser">
+      <h4>Choose Theme</h4>
+      <div data-role="controlgroup" data-type="horizontal" class="theme_buttons">
+        <a href="#" data-role="button" data-theme="a" class="theme_button">A</a>
+        <a href="#" data-role="button" data-theme="b" class="theme_button">B</a>
+        <a href="#" data-role="button" data-theme="c" class="theme_button">C</a>
+        <a href="#" data-role="button" data-theme="d" class="theme_button">D</a>
+        <a href="#" data-role="button" data-theme="e" class="theme_button">E</a>
+      </div>
+    </div>
+
+    <div data-role="fieldcontain" id="backend_chooser">
+      <h4>Choose Backends</h4>
+      <fieldset data-role="controlgroup" id="backends">
+      [% FOREACH pd IN backends %]
+        [% SET name  = 'unknown' %]
+        [% SET name  = backend_detail.$pd.name IF backend_detail.$pd.name %]
+        <input type="checkbox" name="[% pd %]" id="[% 'backend_' _ pd %]" class="backend_checkbox" />
+        <label for="[% 'backend_' _ pd %]" id="[% 'b_lab_' _ pd %]">[% name %]</label>
+      [% END %]
+      </fieldset>
+    </div>
+  </div>
+</div>

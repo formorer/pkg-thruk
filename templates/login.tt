@@ -1,0 +1,66 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+  "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <title>Thruk Monitoring Webinterface</title>
+    <link rel="shortcut icon" href="[% url_prefix %]thruk/themes/[% theme %]/images/favicon.ico" type="image/ico" />
+    [%+ PROCESS _common_css.tt use_frames=1 +%]
+    [%+ PROCESS _common_js.tt +%]
+  </head>
+  <body class='[% page %] loginpage' id='[% page %]'>
+  [% ssi_header %]
+  <!-- Produced by Thruk (http://www.thruk.org). Copyright (c) 2010-2012 Thruk Developer Team. Copyright (c) 2009 Nagios Core Development Team and Community Contributors. Copyright (c) 1999-2009 Ethan Galstad. -->
+  <br><br>
+  <br><br>
+  [% PROCESS _message.tt %]
+  <div align="center">
+    <div id="mainlogo"><a href="http://www.thruk.org" target="_blank"><img class="mainlogo" src="[% url_prefix %]thruk/themes/[% theme %]/images/logo_thruk.png" border="0" alt="Thruk" title="Thruk" width="246" height="89"></a></div>
+    <div class="loginmask">
+      <form method="POST" action="login.cgi">
+          <input type="hidden" name="referer" value="" id="referer">
+          <table class="infoBox">
+            <tr><td class="infoBox">
+              <div class="infoBoxTitle" align="center">Thruk Monitoring Webinterface</div>
+              <table>
+                <tr>
+                  <th>Username</th>
+                  <td><input type="text" name="login" class="logininput"></td>
+                </tr>
+                <tr>
+                  <th>Password</th>
+                  <td><input type="password" name="password" class="logininput"></td>
+                </tr>
+                <tr>
+                  <td>&nbsp;</td>
+                  <td align="center"><input type="submit" name="submit" value="Login" class="loginbutton"></td>
+                </tr>
+              </table>
+            </td></tr>
+          </table>
+      </form>
+    </div>
+    <br>
+    <br>
+    <div id="currentversioninfo">
+    <div class="version">Version [% version %][% IF branch %]~[% branch %][% END %][% IF c.config.omd_version %]<br><font size="-3">OMD [% c.config.omd_version %]</font>[% END %]</div>
+    <div class="releasedate">[% released %]</div>
+    </div>
+    [% PROCESS _disclaimer.tt %]
+  </div>
+  <script type="text/javascript">
+  <!--
+    if ( top.location.href!= window.location.href ) {
+      var ref = top.location.pathname + top.location.search + top.location.hash;
+      top.location.href = '[% loginurl %]?'+ref;
+    } else {
+      var ref = window.location.search + window.location.hash;
+      ref = ref.replace(/^\?expired\&/, '?');
+      ref = ref.replace(/^\?invalid\&/, '?');
+      ref = ref.replace(/^\?/, '/');
+      jQuery('#referer').val(ref);
+    }
+  -->
+  </script>
+  [% ssi_footer %]
+  </body>
+</html>

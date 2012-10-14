@@ -1,0 +1,49 @@
+﻿[% WRAPPER config_detail.tt
+   dataTitle = 'Service Groups'
+%]
+
+<table border="0" class='data'>
+  <tr>
+    [% IF backends.size > 1 %]
+      <th class='data'>Backend</th>
+    [% END %]
+    <th class='data'>Group Name</th>
+    <th class='data'>Description</th>
+    <th class='data'>Host Members</th>
+    <th class='data'>Notes</th>
+    <th class='data'>Notes URL</th>
+    <th class='data'>Action URL</th>
+  </tr>
+
+  [% FOREACH d = data %]
+  [% SET pd = d.peer_key %]
+  [% SET class = 'dataOdd'  IF loop.even %]
+  [% SET class = 'dataEven' IF loop.odd %]
+  [% SET class = 'tableRowHover' IF jump == d.name %]
+  <tr class='[% class %]' id="[% name2id(d.name, 'servicegroup') %]">
+    [% IF backends.size > 1 %]
+      <td class='[% class %]'>
+        [% IF d.backend.size < backends.size %]
+          [% d.backend.join(', ') %]
+        [% ELSE %]
+        <i>all</i>
+        [% END %]
+      </td>
+    [% END %]
+    <td class='[% class %]'>[% d.name %]</td>
+    <td class='[% class %]'>[% d.alias %]</td>
+    <td class='[% class %]'>
+      [% FOREACH service = d.members %]
+        [% IF !loop.first() %] , [% END %]
+        <a href="config.cgi?type=hosts&amp;jump=[% service.0 | uri %]#[% service.0 | uri %]">[% service.0 %]</a> / <a href="config.cgi?type=services&amp;jump=[% service.0 | uri %]_[% service.1 %]#[% service.0 | uri %]_[% service.1 %]">[% service.1 %]</a>
+      [% END %]
+    </td>
+    <td class='[% class %]'>[% d.notes %]</td>
+    <td class='[% class %]'>[% d.notes_url %]</td>
+    <td class='[% class %]'>[% d.action_url %]</td>
+  </tr>
+
+  [% END %]
+</table>
+
+[% END %]

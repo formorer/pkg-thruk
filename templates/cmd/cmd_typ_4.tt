@@ -1,0 +1,23 @@
+﻿[%# which one is authorized? #%]
+[% IF !c.check_cmd_permissions('service', c.request.parameters.service, c.request.parameters.host) %]
+  [% WRAPPER error.tt errorMessage = "you are not authorized for this command" errorDescription = "check your configuration if you believe this is an error" %][% END %]
+[% ELSE %]
+
+[%# description used by the commands page #%]
+[% WRAPPER $cmd_tt
+   request     = 'You are requesting to delete a service comment'
+   description = 'This command is used to delete a specific service comment.'
+%]
+
+[%# definition of the command send to your backend #%]
+[% BLOCK action%]
+    [% comment_id           = c.request.parameters.com_id %]
+
+    DEL_SVC_COMMENT;[% sprintf("%lu",comment_id) %]
+[% END %]
+
+[%# definition of the html form data #%]
+<tr><td class='optBoxRequiredItem'>Comment ID:</td><td><b><input type='text' name='com_id' value='[% c.request.parameters.com_id %]'></b></td></tr>
+
+[% END %]
+[% END %]

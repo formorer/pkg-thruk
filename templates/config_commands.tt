@@ -1,0 +1,33 @@
+﻿[% WRAPPER config_detail.tt
+   dataTitle = 'Commands'
+%]
+
+<table border="0" class='data'>
+  <tr>
+    [% IF backends.size > 1 %]
+      <th class='data'>Backend</th>
+    [% END %]
+    <th class='data'>Command Name</th>
+    <th class='data'>Command Line</th>
+  </tr>
+  [% FOREACH d = data %]
+  [% SET class = 'dataOdd'  IF loop.odd %]
+  [% SET class = 'dataEven' IF loop.even %]
+  [% SET class = 'tableRowHover' IF jump == d.name %]
+  <tr class='[% class %]' id="[% name2id(d.name, 'command') %]">
+    [% IF backends.size > 1 %]
+      <td class='[% class %]'>
+        [% IF d.backend.peer_name.size < backends.size %]
+          [% d.backend.peer_name.join(', ') %]
+        [% ELSE %]
+        <i>all</i>
+        [% END %]
+      </td>
+    [% END %]
+    <td class='[% class %]'>[% d.name %]</td>
+    <td class='[% class %]'>[% d.line %]</td>
+  </tr>
+  [% END %]
+</table>
+
+[% END %]

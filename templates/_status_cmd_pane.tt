@@ -1,0 +1,176 @@
+﻿[% USE date %]
+<div class="cmd_pane" id="cmd_pane">
+<div class="shadow"><div class="shadowcontent">
+<form action="cmd.cgi" method="POST" id="quick_cmd_form">
+  <input type="hidden" name="referer" value="[% clean_referer(short_uri(c)) %]" id="form_cmd_referer">
+  <input type="hidden" name="selected_services" id="selected_services" value="">
+  <input type="hidden" name="selected_hosts"    id="selected_hosts"    value="">
+  <table class="cmd_pane" border=1 width="400">
+    <tr>
+      <th colspan=2 class="status cmd_pane" style="text-align: right">
+        [% IF style == 'combined' %]
+          <a href="#" onclick="selectAllHosts(true,'hst_');selectAllHosts(true,'svc_');selectAllServices(true,'svc_');return false;">select all</a>
+        - <a href="#" onclick="selectAllHosts(false,'hst_');selectAllServices(false,'svc_');selectAllHosts(false,'svc_');return false;">unselect all</a>
+        - <a href="#" onclick="selectAllHosts(false,'hst_');selectAllServices(false,'svc_');selectAllHosts(false,'svc_');selectHostsByClass(Array('.statusHOSTDOWN','.statusHOSTUNREACHABLE'));selectServicesByClass(Array('.statusCRITICAL','.statusWARNING','.statusUNKNOWN'));return false;">all problems</a>
+        - <a href="#" onclick="selectAllHosts(false,'hst_');selectAllServices(false,'svc_');selectAllHosts(false,'svc_');selectHostsByClass(Array('.has_downtime'));selectServicesByClass(Array('.has_downtime'));return false;">all with downtime</a>
+        [% ELSIF style == 'hostdetail' %]
+          <a href="#" onclick="selectAllHosts(true,'dfl_');return false;">select all</a>
+        - <a href="#" onclick="selectAllHosts(false,'dfl_');return false;">unselect all</a>
+        - <a href="#" onclick="selectAllHosts(false,'dfl_');selectHostsByClass(Array('.statusHOSTDOWN','.statusHOSTUNREACHABLE'));return false;">all problems</a>
+        - <a href="#" onclick="selectAllHosts(false,'dfl_');selectHostsByClass(Array('.has_downtime'));return false;">all with downtime</a>
+        [% ELSE %]
+          <a href="#" onclick="selectAllHosts(false,'dfl_');selectAllServices(true,'dfl_');return false;">select all</a>
+        - <a href="#" onclick="selectAllHosts(false,'dfl_');selectAllServices(false,'dfl_');return false;">unselect all</a>
+        - <a href="#" onclick="selectAllHosts(false,'dfl_');selectAllServices(false,'dfl_');selectServicesByClass(Array('.statusCRITICAL','.statusWARNING','.statusUNKNOWN'));return false;">all problems</a>
+        - <a href="#" onclick="selectAllHosts(false,'dfl_');selectAllServices(false,'dfl_');selectServicesByClass(Array('.has_downtime'));return false;">all with downtime</a>
+        [% END %]
+        &nbsp;
+        <a href="#" onclick="selectAllHosts(false,'dfl_');selectAllServices(false,'dfl_');selectAllHosts(false,'svc_');selectAllServices(false,'svc_');selectAllHosts(false,'hst_');return false;"><img src="[% url_prefix %]thruk/themes/[% theme %]/images/btn_close.png" height="14" width="14" alt="close"></a>
+      </th>
+    </tr>
+    <tr>
+      <td class="statusOdd">Command:</td>
+      <td class="statusOdd">
+        <input type='hidden' id="opt_persistent" name='persistent' value="comments">
+        <select name="quick_command" id="quick_command" onChange="check_selected_command(this.value)">
+          [% IF c.config.cmd_quick_status.reschedule %]
+          <option value="1" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/delay.gif); }">reschedule next check</option>
+          <option value="" disabled class="disable">-------------------------</option>
+          [% END %]
+          [% IF c.config.cmd_quick_status.downtime %]
+          <option value="2" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/downtime.gif); }">add downtime</option>
+          <option value="5" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/delete.gif); }">remove downtimes</option>
+          <option value="" disabled class="disable">-------------------------</option>
+          [% END %]
+          [% IF c.config.cmd_quick_status.comment %]
+          <option value="3" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/comment.gif); }">add comment</option>
+          <option value="6" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/delete.gif); }">remove comments</option>
+          <option value="" disabled class="disable">-------------------------</option>
+          [% END %]
+          [% IF c.config.cmd_quick_status.acknowledgement %]
+          <option value="4" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/ack.gif); }">add acknowledgement</option>
+          <option value="7" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/noack.gif); }">remove acknowledgement</option>
+          <option value="" disabled class="disable">-------------------------</option>
+          [% END %]
+          [% IF c.config.cmd_quick_status.active_checks %]
+          <option value="8" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/enabled.gif); }">enable active checks</option>
+          <option value="9" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/disabled.gif); }">disable active checks</option>
+          <option value="" disabled class="disable">-------------------------</option>
+          [% END %]
+          [% IF c.config.cmd_quick_status.notifications %]
+          <option value="10" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/enabled.gif); }">enable notifications</option>
+          <option value="11" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/disabled.gif); }">disable notifications</option>
+          <option value="" disabled class="disable">-------------------------</option>
+          [% END %]
+          [% IF c.config.cmd_quick_status.submit_result %]
+          <option value="12" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/passiveonly.gif); }">submit passive check result</option>
+          [% END %]
+          [% IF c.config.cmd_quick_status.reset_attributes %]
+          <option value="14" style="background-image:url([% url_prefix %]thruk/themes/[% theme %]/images/disabled.gif); }">reset modified attributes</option>
+          [% END %]
+        </select>
+      </td>
+    </tr>
+    <tr id="row_comment">
+      <td class="statusOdd">Comment:</td>
+      <td class="statusOdd"><input type="text" value="" name="com_data" id="com_data" size="37"></td>
+    </tr>
+    <tr id="row_start">
+      <td class="statusOdd">Start:</td>
+      <td class="statusOdd"><a href="#" onclick="show_cal('start_time'); return false;"><img src="[% url_prefix %]thruk/themes/[% theme %]/images/calendar.png" width="16" height="16" alt="pick date" style="vertical-align: text-bottom"></a> <input type="text" value="[% format_date(date.now, '%Y-%m-%d %H:%M:%S') %]" id="start_time" name="start_time" size="20" onkeyup="verify_time(this.id)"></td>
+    </tr>
+    <tr id="row_end">
+      <td class="statusOdd">End:</td>
+      <td class="statusOdd"><a href="#" onclick="show_cal('end_time'); return false;"><img src="[% url_prefix %]thruk/themes/[% theme %]/images/calendar.png" width="16" height="16" alt="pick date" style="vertical-align: text-bottom"></a> <input type="text" value="[% format_date(date.now+downtime_duration, '%Y-%m-%d %H:%M:%S') %]" id="end_time" name="end_time" size="20" onkeyup="verify_time(this.id)"></td>
+    </tr>
+    <tr id="row_downtime_options">
+      <td class="statusOdd" valign="top">Options:</td>
+      <td class="statusOdd">
+        Child Hosts: <select name="childoptions">
+          <option value="0">Do nothing with child hosts</option>
+          <option value="1">Triggered downtime for all child hosts</option>
+          <option value="2">Non-triggered downtime for all childs</option>
+        </select><br>
+        Type: <select name='fixed' onChange="if(this.value==0) {showElement('flexible_options')} else { hideElement('flexible_options') }"><option value="1"> Fixed </option><option value="0"> Flexible </option></select>
+        <span id="flexible_options" style="display:none"><br>If Flexible, Duration: <input type='text' name='hours' value='2' size= "2" maxlength="2"> Hours <input type='text' name='minutes' value='0' size= "2" maxlength="2"> Minutes</span>
+     </td>
+    </tr>
+    <tr id="row_reschedule_options">
+      <td class="statusOdd">Options:</td>
+      <td class="statusOdd">
+        <table border=0 cellpadding=0 cellspacing=0>
+          <tr><td onclick="toggleCheckBox('opt1')">Force Check:</td><td><input type='checkbox' id="opt1" name='force_check'[% IF c.config.cmd_defaults.force_check %] checked[% END %]></td></tr>
+          <tr><td>Spread Checks:</td><td>
+            <select name="spread">
+              <option value="0">no</option>
+              <option value="10">10 Seconds</option>
+              <option value="30">30 Seconds</option>
+              <option value="60"> 1 Minute</option>
+              <option value="300"> 5 Minutes</option>
+            </select>
+          </td></tr>
+        </table>
+      </td>
+    </tr>
+    <tr id="row_ack_options">
+      <td class="statusOdd" valign="top">Options:</td>
+      <td class="statusOdd">
+        <table border=0 cellpadding=0 cellspacing=0>
+          <tr><td onclick="toggleCheckBox('opt2')">Sticky Acknowledgement:</td><td><input type='checkbox' id="opt2" name='sticky_ack'[% IF c.config.cmd_defaults.sticky_ack %] checked[% END %]></td></tr>
+          <tr><td onclick="toggleCheckBox('opt3')">Send Notification:</td><td><input type='checkbox' id="opt3" name='send_notification'[% IF c.config.cmd_defaults.send_notification %] checked[% END %]></td></tr>
+          <tr><td onclick="toggleCheckBox('opt4')">Persistent Comment:</td><td><input type='checkbox' id="opt4" name='persistent_ack'[% IF c.config.cmd_defaults.persistent_ack %] checked[% END %]></td></tr>
+          <tr id="opt_expire"><td onclick="toggleCheckBox('opt5')">Use Expire Time:</td><td><input type='checkbox' id="opt5" name='use_expire'[% IF c.config.cmd_defaults.use_expire %] checked[% END %] onchange="if(this.checked == true) {showElement('row_expire')} else { hideElement('row_expire')};"></td></tr>
+        </table>
+      </td>
+    </tr>
+    <tr id="row_expire">
+      <td class="statusOdd">Expire:</td>
+      <td class="statusOdd"><a href="#" onclick="show_cal('expire_time'); return false;"><img src="[% url_prefix %]thruk/themes/[% theme %]/images/calendar.png" width="16" height="16" alt="pick date" style="vertical-align: text-bottom"></a> <input type="text" value="[% format_date(date.now+expire_ack_duration, '%Y-%m-%d %H:%M:%S') %]" id="expire_time" name="expire_time" size="20" onkeyup="verify_time(this.id)"></td>
+    </tr>
+    <tr id="row_comment_options">
+      <td class="statusOdd" valign="top">Options:</td>
+      <td class="statusOdd">
+        <table border=0 cellpadding=0 cellspacing=0>
+          <tr><td onclick="toggleCheckBox('opt6')">Persistent :</td><td><input type='checkbox' id="opt6" name='persistent_comments'[% IF c.config.cmd_defaults.persistent_comments %] checked[% END %]></td></tr>
+        </table>
+      </td>
+    </tr>
+    <tr id="row_down_options">
+      <td class="statusOdd" valign="top">Options:</td>
+      <td class="statusOdd">
+        <table border=0 cellpadding=0 cellspacing=0>
+          <tr><td onclick="toggleCheckBox('opt7')">Active Downtimes:</td><td><input type='checkbox' id="opt7" name='active_downtimes' checked></td></tr>
+          <tr><td onclick="toggleCheckBox('opt8')">Future Downtimes:</td><td><input type='checkbox' id="opt8" name='future_downtimes'></td></tr>
+        </table>
+      </td>
+    </tr>
+    <tr id="row_submit_options">
+      <td class="statusOdd">Options:</td>
+      <td class="statusOdd">
+        <table border=0 cellpadding=0 cellspacing=0>
+          <tr><td>Check Result:</td><td>
+            <select name="plugin_state">
+              <option value="0">Ok</option>
+              <option value="1">Warning</option>
+              <option value="2">Critical</option>
+              <option value="3">Unknown</option>
+            </select>
+          </td></tr>
+          <tr>
+            <td>Check Output:</td>
+            <td><input type="text" value="" name="plugin_output" id="plugin_output" size="27"></td>
+          </tr>
+          <tr>
+            <td>Performance Data:</td>
+            <td><input type="text" value="" name="performance_data" size="27"></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td class="statusOdd submit" colspan=2><input type="submit" id="multi_cmd_submit_button" value="send command" onClick="return collectFormData('quick_cmd_form')"><img src="[% url_prefix %]thruk/themes/[% theme %]/images/waiting.gif" alt="" border="0" height="0" width="0"></td>
+    </tr>
+  </table>
+</form>
+</div></div>
+</div>

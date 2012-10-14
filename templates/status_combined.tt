@@ -1,0 +1,121 @@
+﻿[% USE date %]
+[% PROCESS _header.tt %]
+[% PROCESS _message.tt %]
+[% PROCESS _sounds.tt %]
+[% authorized_for_read_only = 0 %][% IF c.check_user_roles_wrapper('authorized_for_read_only') %][% authorized_for_read_only = 1 %][% END %]
+
+[% UNLESS authorized_for_read_only %]
+<script type="text/javascript">
+<!--
+  var hst_Hash = new Object({[% FOREACH h = hosts %]r[% loop.index %]: "[% escape_bslash(h.name) %];;[% h.peer_key %]"[% UNLESS loop.last %],[% END %][% END %]});
+  hide_activity_icons_timer = window.setTimeout("hide_activity_icons()", 5000);
+-->
+</script>
+[% END %]
+
+[% PROCESS _overdiv.tt %]
+[% PROCESS _status_cmd_pane.tt %]
+<table border="0" width="100%" cellspacing="0" cellpadding="0" id="top_pane"[% IF hidetop == 1 %]style="visibility:hidden; display:none;"[% END %]>
+  <tr>
+    <td align="left" valign="top" width="33%">
+      [% PROCESS _infobox.tt %]
+    </td>
+    <td align="center" valign="top" width="33%">&nbsp;</td>
+    <td align="center" valign="top" width="33%">&nbsp;</td>
+    <td align="right" valign="bottom">
+      [% PROCESS _help.tt topic = "status_detail" %]
+    </td>
+  </tr>
+  <tr><td colspan=4><br></td></tr>
+</table>
+
+<form action="" method="GET" id="[% paneprefix %]filterForm">
+<input type="image" src="[% url_prefix %]thruk/themes/[% theme %]/images/icon_maximize.gif" style="display:none;">
+<input type="hidden" name="style" value="[% style %]">
+<input type="hidden" name="nav" value="[% nav %]">
+[% IF entries %]<input type="hidden" name="entries" value="[% entries %]">[% END %]
+<input type="hidden" name="hidesearch" id="hidesearch" value="[% hidesearch %]">
+<input type="hidden" name="hidetop" id="hidetop" value="[% hidetop %]">
+<input type="hidden" name="title" id="title" value="[% custom_title %]">
+
+[% UNLESS minimal %]
+<table border="0" width="100%" cellpadding=0 cellspacing=0>
+  <tr>
+    <td valign="top" align="left" width="33%" nowrap>
+      [% PROCESS _status_filter.tt style='hostdetail' substyle='host' paneprefix='hst_' show_form=0 %]
+    </td>
+    <td valign="top" align="center" width="33%" nowrap>
+      <div align="center" class='statusTitle'>
+        [% IF custom_title != '' %][% custom_title %]
+        [% ELSE %]Host &amp; Service Details
+        [% END %]
+      </div>
+    </td>
+    <td valign="bottom" align="right" width="33%"></td>
+  </tr>
+  <tr>
+    <td align="left" width="33%" nowrap></td>
+    <td valign="bottom" align="center" width="33%" nowrap>
+      [% IF sortoption_hst %]
+      <div class="statusSort" align="CENTER">Hosts sorted by <b>[% hst_orderby %]</b> ([% IF hst_orderdir == 'DESC' %]descending[% ELSE %]ascending[% END %])</div>
+      [% END %]
+      [% UNLESS authorized_for_read_only %]
+      <div class="hint">
+          <a href="#" onclick="pagetype='hostdetail';selectAllHosts(true,'hst_');">select all</a>
+        - <a href="#" onclick="pagetype='hostdetail';selectAllHosts(false,'hst_');">unselect all</a>
+        - <a href="#" onclick="pagetype='hostdetail';selectAllHosts(false,'hst_');selectHostsByClass(Array('.statusHOSTDOWN','.statusHOSTUNREACHABLE'));">all problems</a>
+        - <a href="#" onclick="pagetype='hostdetail';selectAllHosts(false,'hst_');selectHostsByClass(Array('.has_downtime'));">all with downtime</a>
+      </div>
+      [% END %]
+    </td>
+    <td valign="bottom" align="right" width="33%">
+      [% PROCESS _add_bookmark.tt style='combined' %]
+      [% PROCESS _show_link.tt    style='combined' %]
+    </td>
+  </tr>
+</table>
+[% END %]
+
+[% PROCESS _status_hostdetail_table.tt data=hosts paneprefix='hst_' sortprefix='_hst' %]
+<div class='itemTotalsTitle'>[% hosts.size %] of [% hosts.size %] Matching Host Entries Displayed</div>
+<br>
+
+[% UNLESS minimal %]
+<br>
+<table border="0" width="100%" cellpadding=0 cellspacing=0>
+  <tr>
+    <td valign="top" align="left" width="33%" nowrap>
+      [% PROCESS _status_filter.tt style='detail' substyle='service' paneprefix='svc_' show_form=0 %]
+    </td>
+    <td valign="top" align="center" width="33%" nowrap>
+      </td>
+    <td valign="bottom" align="right" width="33%"></td>
+  </tr>
+</table>
+[% END %]
+
+<script type="text/javascript">
+<!--
+  var svc_Hash = new Object({[% FOREACH s = services %]r[% loop.index %]: "[% escape_bslash(s.host_name) %];[% escape_bslash(s.description) %];[% s.peer_key %]"[% UNLESS loop.last %],[% END %][% END %]});
+-->
+</script>
+
+[% IF sortoption_svc %]
+<div class="statusSort" align="CENTER">Services sorted by <b>[% svc_orderby %]</b> ([% IF svc_orderdir == 'DESC' %]descending[% ELSE %]ascending[% END %])</div>
+[% END %]
+[% UNLESS authorized_for_read_only %]
+[% UNLESS minimal %]
+<div class="hint">
+    <a href="#" onclick="pagetype='servicedetail';selectAllServices(true,'svc_');">select all</a> (<a href="#" onclick="pagetype='servicedetail';selectAllHosts(true,'svc_');">hosts</a>)
+  - <a href="#" onclick="pagetype='servicedetail';selectAllHosts(false,'svc_');selectAllServices(false,'svc_');">unselect all</a>
+  - <a href="#" onclick="pagetype='servicedetail';selectAllHosts(false,'svc_');selectAllServices(false,'svc_');selectServicesByClass(Array('.statusCRITICAL','.statusWARNING','.statusUNKNOWN'));">all problems</a>
+  - <a href="#" onclick="pagetype='servicedetail';selectAllHosts(false,'svc_');selectAllServices(false,'svc_');selectServicesByClass(Array('.has_downtime'));">all with downtime</a>
+</div>
+[% END %]
+[% END %]
+[% PROCESS _status_detail_table.tt  data=services paneprefix='svc_' sortprefix='_svc' %]
+<div class='itemTotalsTitle'>[% services.size %] of [% services.size %] Matching Service Entries Displayed</div>
+
+</form>
+
+[% PROCESS _footer.tt %]

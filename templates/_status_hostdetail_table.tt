@@ -1,0 +1,116 @@
+﻿[% PROCESS custom_perf_bar_adjustments.tt %]
+
+      <table border="0" class='status' width="100%" id="hoststatusTable">
+        <tr>
+          [% IF show_backends_in_table == 2 %]
+          <th class='status' nowrap>Site&nbsp;<a href='[% short_uri(c, ${"sorttype$sortprefix"} => 1, ${"sortoption$sortprefix"} => 7) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/up.gif' border="0" alt='Sort by site (ascending)' title='Sort by site (ascending)'></a><a href='[% short_uri(c, ${"sorttype$sortprefix"} => 2, ${"sortoption$sortprefix"} => 7) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/down.gif' border="0" alt='Sort by site (descending)' title='Sort by site (descending)'></a></th>
+          [% END %]
+          <th class='status'>Host&nbsp;<a href='[%           short_uri(c, ${"sorttype$sortprefix"} => 1, ${"sortoption$sortprefix"} => 1 ) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/up.gif' border="0" alt='Sort by host name (ascending)' title='Sort by host name (ascending)'></a><a href='[%             short_uri(c, ${"sorttype$sortprefix"} => 2, ${"sortoption$sortprefix"} => 1 ) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/down.gif' border="0" alt='Sort by host name (descending)' title='Sort by host name (descending)'></a></th>
+          <th class='status'>Status&nbsp;<a href='[%         short_uri(c, ${"sorttype$sortprefix"} => 1, ${"sortoption$sortprefix"} => 8 ) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/up.gif' border="0" alt='Sort by host status (ascending)' title='Sort by host status (ascending)'></a><a href='[%         short_uri(c, ${"sorttype$sortprefix"} => 2, ${"sortoption$sortprefix"} => 8 ) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/down.gif' border="0" alt='Sort by host status (descending)' title='Sort by host status (descending)'></a></th>
+          <th class='status'>Last Check&nbsp;<a href='[%     short_uri(c, ${"sorttype$sortprefix"} => 1, ${"sortoption$sortprefix"} => 4 ) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/up.gif' border="0" alt='Sort by last check time (ascending)' title='Sort by last check time (ascending)'></a><a href='[% short_uri(c, ${"sorttype$sortprefix"} => 2, ${"sortoption$sortprefix"} => 4 ) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/down.gif' border="0" alt='Sort by last check time (descending)' title='Sort by last check time (descending)'></a></th>
+          <th class='status'>Duration&nbsp;<a href='[%       short_uri(c, ${"sorttype$sortprefix"} => 1, ${"sortoption$sortprefix"} => 6 ) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/up.gif' border="0" alt='Sort by state duration (ascending)' title='Sort by state duration (ascending)'></a><a href='[%   short_uri(c, ${"sorttype$sortprefix"} => 2, ${"sortoption$sortprefix"} => 6 ) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/down.gif' border="0" alt='Sort by state duration time (descending)' title='Sort by state duration time (descending)'></a></th>
+          [% IF show_host_attempts %]
+          <th class='status' nowrap>Attempt&nbsp;<a href='[% short_uri(c, ${"sorttype$sortprefix"} => 1, ${"sortoption$sortprefix"} => 5) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/up.gif' border="0" alt='Sort by current attempt (ascending)' title='Sort by current attempt (ascending)'></a><a href='[% short_uri(c, ${"sorttype$sortprefix"} => 2, ${"sortoption$sortprefix"} => 5) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/down.gif' border="0" alt='Sort by current attempt (descending)' title='Sort by current attempt (descending)'></a></th>
+          [% END %]
+          [% IF show_backends_in_table == 1 %]
+          <th class='status' nowrap>Site&nbsp;<a href='[% short_uri(c, ${"sorttype$sortprefix"} => 1, ${"sortoption$sortprefix"} => 7) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/up.gif' border="0" alt='Sort by site (ascending)' title='Sort by site (ascending)'></a><a href='[% short_uri(c, ${"sorttype$sortprefix"} => 2, ${"sortoption$sortprefix"} => 7) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/down.gif' border="0" alt='Sort by site (descending)' title='Sort by site (descending)'></a></th>
+          [% END %]
+          <th class='status' nowrap>Status Information&nbsp;<a href='[% short_uri(c, ${"sorttype$sortprefix"} => 1, ${"sortoption$sortprefix"} => 9) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/up.gif' border="0" alt='Sort by status information (ascending)' title='Sort by status information (ascending)'></a><a href='[% short_uri(c, ${"sorttype$sortprefix"} => 2, ${"sortoption$sortprefix"} => 9) %]'><img src='[% url_prefix %]thruk/themes/[% theme %]/images/down.gif' border="0" alt='Sort by status information (descending)' title='Sort by status information (descending)'></a></th>
+        </tr>
+
+        [%  FOREACH h = data %]
+        [% SET class = 'statusEven' IF loop.odd %]
+        [% SET class = 'statusOdd'  IF loop.even %]
+
+        [% SET peer_key      = h.peer_key %]
+        [% SET program_start = pi_detail.$peer_key.program_start %]
+
+        [% SET comment_count = h.comments.size %]
+
+        [% IF h.has_been_checked == 0 %]
+          [% statusClass='statusHOSTPENDING' %]
+          [% status ='PENDING' %]
+        [% ELSIF h.state == 0 %]
+          [% statusClass='statusHOSTUP' %]
+          [% status ='UP' %]
+        [% ELSIF h.state == 1 %]
+          [% statusClass='statusHOSTDOWN' %]
+          [% status ='DOWN' %]
+          [% class = 'statusBGDOWN' %]
+        [% ELSIF h.state == 2 %]
+          [% statusClass='statusHOSTUNREACHABLE' %]
+          [% status ='UNREACHABLE' %]
+          [% class = 'statusBGDOWN' %]
+        [% END %]
+
+        <tr id="[% paneprefix %]r[% loop.index %]"[% UNLESS authorized_for_read_only %] onmouseover="addRowSelector(this.id, 'host')"[% END %]>
+          [% IF show_backends_in_table == 2 %]
+          <td class='[% class %]' align="center" nowrap>[% h.peer_name %]</td>
+          [% END %]
+          <td class='[% statusClass %]'>
+            <table border="0" width='100%' cellpadding="0" cellspacing="0">
+              <tr>
+                <td align="left">
+                  <table border="0" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td align="left" valign="middle" class='[% statusClass %]'><a href='extinfo.cgi?type=1&amp;host=[% h.name | uri %]&amp;backend=[% h.peer_key %]' title='[% h.address %]'>[% h.display_name %]</a>&nbsp;</td>
+                    </tr>
+                  </table>
+                </td>
+                <td align="right" valign="middle">
+                  [% PROCESS _status_host_attributes.tt hostprefix="" host=h host_comment_count=comment_count with_status=1 %]
+                </td>
+              </tr>
+            </table>
+          </td>
+          <td class='[% statusClass %]'>[% status %]</td>
+          <td class='[% class %]' nowrap align="center">[% date_format(c, h.last_check) %]</td>
+          <td class='[% class %]' nowrap>[% IF h.last_state_change %][% duration(date.now - h.last_state_change) %][% ELSE %][% duration(date.now - program_start) %]+[% END %]</td>
+          [% IF show_host_attempts %]
+          <td class='[% class %]' align="center">[% h.current_attempt %]/[% h.max_check_attempts %][% IF show_notification_number %][% IF h.current_notification_number > 0 %] <span title="This host has send out [% h.current_notification_number %] notifications">#[% h.current_notification_number %]</span>[% END %][% IF h.first_notification_delay > 0 %][% first_remaining = calculate_first_notification_delay_remaining(h) %][% IF first_remaining >= 0 %] <span title="This host will send out notifications in [% first_remaining %] minutes">~[% first_remaining %]min</span>[% END %][% END %][% END %]</td>
+          [% END %]
+          [% IF show_backends_in_table == 1 %]
+          <td class='[% class %]' align="center" nowrap>[% h.peer_name %]</td>
+          [% END %]
+          [% IF h.has_been_checked == 0 %]
+            <td class='[% class %]' valign='middle' align="left">
+              [% IF h.active_checks_enabled == 0 %]
+              Host is not scheduled to be checked...
+              [% ELSE %]
+              Host check scheduled for [% format_date(h.next_check, datetime_format_long) %]
+              [% END %]
+            </td>
+          [% ELSE %]
+            <td align="left" class='[% class %]'
+            [% IF h.long_plugin_output and show_long_plugin_output != 'off' %]
+              [% IF show_long_plugin_output == 'popup' %]
+                [% IF escape_html_tags %]
+                  [% info_popup_event_type %]="return overlib(this.abbr,CAPTION,'[% h.display_name %]',WIDTH,600,[% c.config.info_popup_options %]);" abbr='[% escape_html(escape_html(h.plugin_output)) %]<br>[% escape_html(nl2br(escape_html(h.long_plugin_output))) %]'
+                [% ELSE %]
+                  [% info_popup_event_type %]="return overlib(this.abbr,CAPTION,'[% h.display_name %]',WIDTH,600,[% c.config.info_popup_options %]);" abbr='[% escape_html(h.plugin_output) %]<br>[% nl2br(escape_html(h.long_plugin_output)) %]'
+                [% END %]
+              [% END %]
+            [% END %]
+            >
+            [% pnp_url = get_pnp_url(c, h, 1) %]
+            [% PROCESS _perfdata_table.tt write="true" state=h.state plugin_output=h.plugin_output perfdata = h.perf_data check_command=h.check_command hst=h.name svc="_HOST_" %]
+
+            [% IF h.long_plugin_output and show_long_plugin_output == 'popup' %]
+              [% IF escape_html_tags %]<span class="has_long_plugin_output">[% escape_html(h.plugin_output) %]</span>[% ELSE %]<span class="has_long_plugin_output">[% h.plugin_output %]</span>[% END %]
+            [% ELSE %]
+              [% IF escape_html_tags %][% escape_html(h.plugin_output) %][% ELSE %][% h.plugin_output %][% END %]
+            [% END %]
+
+            [% IF h.long_plugin_output and show_long_plugin_output == 'inline' %]
+              [% IF escape_html_tags %]
+                <br>[% nl2br(escape_html(h.long_plugin_output)) %]
+              [% ELSE %]
+                <br>[% nl2br(h.long_plugin_output) %]
+              [% END %]
+            [% END %]
+            </td>
+          [% END %]
+        </tr>
+        [% END %]
+
+      </table>

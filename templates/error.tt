@@ -1,0 +1,54 @@
+﻿[% IF c.request.parameters.exists('json') %]
+[% IF die_on_errors %][% throw(errorMessage) %][% END %]
+{
+  [% IF errorMessage %]
+    errorMessage: '[% escape_quotes(errorMessage) %]',
+    errorDescription: '[% escape_quotes(errorDescription) %]'
+  [% ELSE %]
+    errorMessage: 'internal server error',
+    errorDescription: 'internal server error occured, please look at your catalyst logfile'
+  [% END %]
+  [% IF errorDetails %]
+  , errorDetails: '[% escape_quotes(errorDetails) %]'
+  [% END %]
+}
+[% ELSE %]
+[% IF die_on_errors %][% throw(errorMessage) %][% END %]
+[% PROCESS _header.tt %]
+
+  <table border="0" width="100%" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="left" valign="top" width="33%">
+        [% PROCESS _infobox.tt %]
+      </td>
+      <td align="center" valign="middle" width="33%"></td>
+      <td align="right" valign="bottom" width="33%"></td>
+    </tr>
+  </table><br>
+  [% IF errorMessage %]
+  <div class='errorMessage'>[% errorMessage %]</div>
+  <div class='errorDescription'>[% errorDescription %]</div>
+  [% ELSE %]
+  <div class='errorMessage'>internal server error</div>
+  <div class='errorDescription'>internal server error occured, please look at your catalyst logfile</div>
+  [% IF c.error.size > 0 %][% stacktrace = c.error.0 %][% END %]
+  [% END %]
+
+  [% IF errorDetails %]
+  <br>
+  <div class='errorDescription' style="text-align: left">
+  Details:<br>
+  [% errorDetails %]
+  </div><br>
+  [% END %]
+
+  [% IF stacktrace %]
+  <br>
+  <div class='errorDescription'>
+  <a href="mailto:bugs@thruk.org?subject=Thruk%20Error%20Report&amp;body=[% PROCESS _error_report.tt | uri %]">
+    <img src="[% url_prefix %]thruk/themes/[% theme %]/images/bug_error.png" alt="Send Bug Report" width="16" height="16" style="vertical-align: text-bottom;">
+    Help making Thruk better and send a bug report</a>.<br>
+  </div>
+  [% END %]
+[% PROCESS _footer.tt %]
+[% END %]

@@ -1,0 +1,23 @@
+﻿<script type="text/javascript">
+<!--
+  [%+ PROCESS _common_js_bugs.tt +%]
+  var url_prefix             = '[% url_prefix %]';
+  var cookie_path            = '[% cookie_path %]';
+  var theme                  = '[% theme %]';
+  var has_expire_acks        = [% IF has_expire_acks %]true[% ELSE %]false[% END %];
+  var fav_counter            = [% IF fav_counter +%]true[% ELSE %]false[% END %];
+  var perf_bar_mode          = '[% perf_bar_mode %]';
+-->
+</script>
+[%+ UNLESS thruk_debug %]
+<script type="text/javascript" src="[% url_prefix %]thruk/javascript/all_in_one-[% version %].js"></script>
+[% ELSE %]
+  [% FOREACH jsfiles = all_in_one_javascript %]
+    <script type="text/javascript" src="[% url_prefix %]thruk/javascript/[% jsfiles %]"></script>
+  [% END %]
+[% END +%]
+<script type="text/javascript">
+<!--
+    jQuery.noConflict();
+-->
+</script>

@@ -1,0 +1,35 @@
+﻿[% USE date %]
+
+<table width="100%"><tr>
+<td style="width:10%">&nbsp;</td>
+<td style="width:80%">
+  <div align="center">[% PROCESS _pager.tt %]</div>
+</td>
+<td style="width:10%" align="right">
+  [% PROCESS _add_bookmark.tt style="detail" %]
+  [% PROCESS _show_link.tt style="detail" %]
+  [% PROCESS _excel_export.tt columns=[ 'Time', 'Event', 'Event Detail', 'Hostname', 'Service Description', 'Info', 'Message' ] %]
+</td>
+</tr></table>
+
+[% SET last_hour = '' %]
+[% FOREACH l = data %]
+[% this_hour = format_date(l.time, '%Y-%m-%d  %H') _ ':00' %]
+[% IF this_hour != last_hour %]
+  [% SET last_hour = this_hour %]
+
+[% IF ! loop.first %]</div>[% END %]
+<div class='dateTimeBreak'><table border="0" width="95%"><tr><td width="40%"><hr width="100%"></td><td align="center" class='dateTimeBreak'>[% format_date(l.time, datetime_format_log) _ ':00' %]</td><td width="40%"><hr width="100%"></td></tr></table></div>
+<div class='logEntries'>
+
+[% END %]
+[% PROCESS _logs_line.tt %]
+<img align='middle' src='[% url_prefix %]thruk/themes/[% theme %]/images/[% pic %]' alt='[% desc %]' title='[% desc %]'>[[% format_date(l.time, datetime_format) %]] [% IF escape_html_tags %][% escape_html(message) %][% ELSE %][% message %][% END %]<br clear='all'>
+
+[% END %]
+
+<div align="center">[% PROCESS _pager.tt %]</div>
+
+[% IF data.size and data.size > 0 %]</div>[% END %]
+<hr>
+<div class="itemTotalsTitle">[% IF data.size %][% data.size %] of [% pager.total_entries %][% ELSE %]0[% END %] Matching Log Entries Displayed</div>

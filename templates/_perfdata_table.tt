@@ -1,0 +1,11 @@
+﻿[% IF perf_bar_mode != 'off' %]
+<script type="text/javascript">
+<!--
+var pnp_url = "";
+[%+ IF pnp_url %]
+  var pnp_url = "[% pnp_url %]/graph?host=[% hst | uri %]&srv=[% svc | uri %]"
+[% END +%]
+perf_table([% write %], [% state %], '[% escape_quotes(escape_bslash(plugin_output)) %]', '[% escape_quotes(escape_bslash(perfdata)) %]', '[% escape_quotes(escape_bslash(check_command)) %]', pnp_url);
+-->
+</script>
+[% END %]

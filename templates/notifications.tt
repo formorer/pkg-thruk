@@ -1,0 +1,172 @@
+﻿[% USE date %]
+[% PROCESS _header.tt %]
+
+    <form method='get' action='notifications.cgi' id="date_form">
+    <input type="hidden" name="entries" value="[% entries_per_page %]">
+    <table border="0" width="100%" cellspacing="0" cellpadding="0">
+      <tr>
+        <td align="left" valign="top" width="33%">
+        [% PROCESS _infobox.tt %]
+        </td>
+        <td align="center" valign="top" width="33%">
+          <div align="center" class='dataTitle'>
+            [% IF contact == 'all' %]
+              All Contacts
+              [% SET link = "contact=all" %]
+            [% ELSIF contact != '' %]
+              Contact '[% contact %]'
+              [% SET link = "contact=" _ contact %]
+            [% ELSIF host != '' and service != '' %]
+              [% SET link = "host=" _ host _ "&amp;service=" _ service %]
+              Service '[% service %]' On Host '[% host %]'
+            [% ELSIF host == 'all'  %]
+              [% SET link = "host=" _ host %]
+              All Hosts and Services
+            [% ELSIF host != ''  %]
+              [% SET link = "host=" _ host %]
+              Host '[% host %]'
+            [% END %]
+            [% SET link = link _ "&amp;type=" _ type %]
+          </div><br>
+          <table border="0" cellspacing="0" cellpadding="0" class='navBox'>
+            <tr>
+              <td align="center" valign="middle" class='navBoxItem' width="75">
+                Previous Day<br>
+                <img style="cursor: pointer;" src='[% url_prefix %]thruk/themes/[% theme %]/images/left.gif' alt='Previous Day' title='Previous Day' onclick="document.getElementById('archive').value='-1'; document.getElementById('date_form').submit();">
+              </td>
+              <td width="15"></td>
+              <td align="center" class='navBoxDate' nowrap>
+                [% PROCESS _log_date_select.tt %]
+              </td>
+              <td valign="middle">
+                &nbsp;&nbsp;<input type='submit' value='Update'>
+                <input type="hidden" name="archive" value="" id="archive">
+              </td>
+              <td align="center" valign="middle" class='navBoxItem' width="75">
+                [% IF end < date.now %]
+                Next Day<br>
+                <img style="cursor: pointer;" src='[% url_prefix %]thruk/themes/[% theme %]/images/right.gif' alt='Next Day' title='Next Day' onclick="document.getElementById('archive').value='+1'; document.getElementById('date_form').submit();">
+                [% END %]
+              </td>
+            </tr>
+          </table>
+        </td>
+        <td align="right" valign="top" width="33%">
+          <table border="0" class='optBox'>
+            <tr>
+              <td align="left" colspan="2" class='optBoxItem'>Notification detail level for all contacts:</td>
+            </tr>
+            <tr>
+              <td align="left" colspan="2" class='optBoxItem'>
+                <select name='type'>
+                  <option value="0"[%     IF type == 0     %] selected[% END %]>All notifications</option>
+                  [% IF service == '' %]
+                  <option value="1"[%     IF type == 1     %] selected[% END %]>All service notifications</option>
+                  <option value="2"[%     IF type == 2     %] selected[% END %]>All host notifications</option>
+                  [% END %]
+                  <option value="8192"[%  IF type == 8192  %] selected[% END %]>Service custom</option>
+                  <option value="512"[%   IF type == 512   %] selected[% END %]>Service acknowledgements</option>
+                  <option value="4"[%     IF type == 4     %] selected[% END %]>Service warning</option>
+                  <option value="8"[%     IF type == 8     %] selected[% END %]>Service unknown</option>
+                  <option value="16"[%    IF type == 16    %] selected[% END %]>Service critical</option>
+                  <option value="32"[%    IF type == 32    %] selected[% END %]>Service recovery</option>
+                  <option value="2048"[%  IF type == 2048  %] selected[% END %]>Service flapping</option>
+                  [% IF service == '' %]
+                  <option value="16384"[% IF type == 16384 %] selected[% END %]>Host custom</option>
+                  <option value="1024"[%  IF type == 1024  %] selected[% END %]>Host acknowledgements</option>
+                  <option value="64"[%    IF type == 64    %] selected[% END %]>Host down</option>
+                  <option value="128"[%   IF type == 128   %] selected[% END %]>Host unreachable</option>
+                  <option value="256"[%   IF type == 256   %] selected[% END %]>Host recovery</option>
+                  <option value="4096"[%  IF type == 4096  %] selected[% END %]>Host flapping</option>
+                  [% END %]
+                </select>
+              </td>
+            </tr>
+            <tr>
+              <td align="left" class='optBoxItem'>Older Entries First:</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td align="left" valign="bottom" class='optBoxItem'>
+                [% IF contact %]<input type='hidden' name='contact' value='[% contact %]'>[% END %]
+                [% IF service %]<input type='hidden' name='service' value='[% service %]'>[% END %]
+                [% IF host    %]<input type='hidden' name='host' value='[% host %]'>[% END %]
+                <input type='checkbox' name='oldestfirst'[% IF oldestfirst %] checked[% END %]>
+              </td>
+              <td align="right" class='optBoxItem'>
+                <input type='submit' value='Update'>
+              </td>
+            </tr>
+            <tr>
+              <td></td>
+              <td align="right" valign="bottom"></td>
+            </tr>
+          </table>
+          [% PROCESS _help.tt topic = "notifications" %]
+        </td>
+      </tr>
+    </table>
+    </form>
+    <br>
+
+<div align="right">
+  [% PROCESS _add_bookmark.tt style="detail" %]
+  [% PROCESS _show_link.tt style="detail" %]
+  [% PROCESS _excel_export.tt columns=[ 'Host', 'Service', 'Type', 'Time', 'Contact', 'Command', 'Information' ] %]
+</div>
+
+<div align="center">[% PROCESS _pager.tt %]</div>
+
+    <div align='center'>
+      <table border="0" class='notifications'>
+        <tr>
+          <th class='notifications'>Host</th>
+          <th class='notifications'>Service</th>
+          <th class='notifications'>Type</th>
+          <th class='notifications'>Time</th>
+          <th class='notifications'>Contact</th>
+          <th class='notifications'>Notification Command</th>
+          <th class='notifications'>Information</th>
+        </tr>
+
+        [% FOREACH n = data %]
+        [% SET class = 'notificationsOdd'  IF loop.even %]
+        [% SET class = 'notificationsEven' IF loop.odd %]
+        [% PROCESS _notifications_log_line.tt %]
+        <tr class='[% class %]'>
+          <td class='[% class %]'><a href='extinfo.cgi?type=1&amp;host=[% n.host_name | uri %]&amp;backend=[% n.peer_key %]'>[% n.host_name %]</a></td>
+          <td class='[% class %]'>
+            [% IF n.service_description %]
+            <a href='extinfo.cgi?type=2&amp;host=[% n.host_name | uri %]&amp;service=[% n.service_description | uri %]&amp;backend=[% n.peer_key %]'>[% n.service_description %]</a>
+            [% ELSE %]
+            N/A
+            [% END %]
+          </td>
+          <td class='[% statusclass %]'>[% level %]</td>
+          <td class='[% class %]'>[% format_date(n.time, datetime_format) %]</td>
+          <td class='[% class %]'><a href='config.cgi?type=contacts#[% n.contact_name %]'>[% n.contact_name %]</a></td>
+          <td class='[% class %]'><a href='config.cgi?type=commands#[% n.command_name %]'>[% n.command_name %]</a></td>
+          <td class='[% class %] left'>[% IF escape_html_tags %][% escape_html(n.plugin_output) %][% ELSE %][% n.plugin_output %][% END %]</td>
+        </tr>
+        [% END %]
+
+      </table>
+    </div>
+
+<div align="center">[% PROCESS _pager.tt %]</div>
+
+[% IF data.size == 0 %]
+<br><div class='errorMessage'>
+[% IF contact != '' %]
+  No notifications have been recorded for this contact in the current timeperiod
+[% ELSIF host != '' and service != '' %]
+  No notifications have been recorded for this service in the current timeperiod
+[% ELSIF host != ''  %]
+  No notifications have been recorded for this host in the current timeperiod
+[% END %]
+</div>
+[% END %]
+
+<div class="itemTotalsTitle">[% IF data.size %][% data.size %] of [% pager.total_entries %][% ELSE %]0[% END %] Matching Notifications Displayed</div>
+
+[% PROCESS _footer.tt %]

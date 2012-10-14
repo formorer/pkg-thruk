@@ -1,0 +1,83 @@
+﻿[% IF use_pager AND pager %]
+
+  <form action="" method="GET">
+  [% FOREACH par = c.request.query_params.keys %]
+    [% NEXT IF par == 'entries' %]
+    [% NEXT IF par == 'next' %]
+    [% NEXT IF par == 'next.x' %]
+    [% NEXT IF par == 'next.y' %]
+    [% NEXT IF par == 'previous' %]
+    [% NEXT IF par == 'previous.x' %]
+    [% NEXT IF par == 'previous.y' %]
+    [% NEXT IF par == 'first' %]
+    [% NEXT IF par == 'first.x' %]
+    [% NEXT IF par == 'first.y' %]
+    [% NEXT IF par == 'last' %]
+    [% NEXT IF par == 'last.x' %]
+    [% NEXT IF par == 'last.y' %]
+    [% NEXT IF par == 'update' %]
+    [% NEXT IF par == 'update.x' %]
+    [% NEXT IF par == 'update.y' %]
+    [% NEXT IF par == 'page' %]
+    [% NEXT IF par == 'noheader' %]
+    [% FOR value IN c.request.query_params.$par.list %]
+      <input type="hidden" name="[% par %]" value="[% value %]">
+    [% END %]
+  [% END %]
+
+  [% IF pages > 1 %]
+  <br>
+  <input type="hidden" name="page" value="[% current_page %]">
+  [% IF pager_previous_page %]
+    <input type="image" src="[% url_prefix %]thruk/themes/[% theme %]/images/resultset_first.png" name="first" alt="first" value="1" class="pager_input_img"><input type="image" src="[% url_prefix %]thruk/themes/[% theme %]/images/resultset_previous.png" name="previous" alt="previous" value="1" class="pager_input_img">&nbsp;
+  [% END %]
+
+  [% IF pages <= 13 %]
+    [% cur_page  = 1 %]
+    [% WHILE cur_page <= pages %]
+      [% class = "pager_direct_link" %]
+      [% IF cur_page == current_page %]
+        [% class = "pager_direct_link_current" %]
+      [% END %]
+      <a class="[% class %]" href="[% uri_with(c, 'page' => cur_page, 'next' => 'undef', 'next.x' => 'undef', 'next.y' => 'undef', 'previous' => 'undef', 'previous.x' => 'undef', 'previous.y' => 'undef', 'last' => 'undef', 'last.x' => 'undef', 'last.y' => 'undef', 'first' => 'undef', 'first.x' => 'undef', 'first.y' => 'undef') %]">[% cur_page %]</a>
+      [% cur_page  = cur_page + 1 %]
+    [% END %]
+  [% ELSE %]
+    [% firstpage = current_page - 3 %]
+    [% IF firstpage <= 0 %][% firstpage = 1 %][% END %]
+    [% IF firstpage != 1 %]<a class="pager_direct_link" href="[% uri_with(c, page => 1, next => 'undef', previous => 'undef') %]">1</a>[% END %]
+    [% IF firstpage > 2 %]...[% END %]
+    [% lastpage  = firstpage + 9 %]
+    [% IF lastpage >= pages %][% lastpage = pages %][% firstpage = lastpage - 9 %][% END %]
+    [% cur_page  = firstpage %]
+    [% WHILE cur_page <= lastpage %]
+      [% class = "pager_direct_link" %]
+      [% IF cur_page == current_page %]
+        [% class = "pager_direct_link_current" %]
+      [% END %]
+      <a class="[% class %]" href="[% uri_with(c, 'page' => cur_page, 'next' => 'undef', 'next.x' => 'undef', 'next.y' => 'undef', 'previous' => 'undef', 'previous.x' => 'undef', 'previous.y' => 'undef', 'last' => 'undef', 'last.x' => 'undef', 'last.y' => 'undef', 'first' => 'undef', 'first.x' => 'undef', 'first.y' => 'undef') %]">[% cur_page %]</a>
+      [% cur_page  = cur_page + 1 %]
+    [% END %]
+    [% IF lastpage < pages - 1 %]...[% END %]
+    [% IF lastpage != pages %]<a class="pager_direct_link" href="[% uri_with(c, page => pages, next => 'undef', previous => 'undef') %]">[% pages %]</a>[% END %]
+  [% END %]
+
+  [% IF pager_next_page AND pages > 1 %]
+    &nbsp;<input type="image" src="[% url_prefix %]thruk/themes/[% theme %]/images/resultset_next.png" name="next" alt="next" value="1" class="pager_input_img"><input type="image" src="[% url_prefix %]thruk/themes/[% theme %]/images/resultset_last.png" name="last" alt="last" value="1" class="pager_input_img">
+  [% END %]
+  [% END %]
+
+  [% IF paging_steps.0 && pager.total_entries > paging_steps.0 %]
+    &nbsp;&nbsp;
+    <select name="entries" onChange="this.form.submit()">
+      [% FOR step = paging_steps %]
+        [% IF step == "all" %]
+          <option value="all"[%  IF entries_per_page == "all" %] selected[% END %]>all on one page</option>
+        [% ELSE %]
+          <option value="[% step %]"[% IF entries_per_page == step %] selected[% END %]>[% step %] per page</option>
+        [% END %]
+      [% END %]
+    </select>
+  [% END %]
+  </form>
+[% END %]
