@@ -66,6 +66,9 @@ case "$1" in
             fi
         done
 
+        # install thruk crontab 
+        /usr/bin/thruk -a installcron --local
+
         db_get thruk/adminpassword
         admpass="$RET"
 
