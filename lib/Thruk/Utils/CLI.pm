@@ -19,6 +19,7 @@ use LWP::UserAgent;
 use JSON::XS;
 use File::Slurp;
 use URI::Escape;
+use Encode qw(encode_utf8);
 use Thruk::Utils::IO;
 
 $Thruk::Utils::CLI::verbose = 0;
@@ -33,7 +34,7 @@ $Thruk::Utils::CLI::c       = undef;
     new([ $options ])
 
  $options = {
-    verbose         => 0|1,         # be more verbose
+    verbose         => 0-2,         # be more verbose
     credential      => 'secret',    # secret key when accessing remote instances
     remoteurl       => 'url',       # url where to access remote instances
     local           => 0|1,         # local requests only
@@ -44,18 +45,18 @@ create CLI tool object
 =cut
 sub new {
     my($class, $options) = @_;
-    $Thruk::Utils::CLI::verbose = $options->{'verbose'} if defined $options->{'verbose'};
+    $options->{'verbose'} = 1 unless defined $options->{'verbose'};
+    $Thruk::Utils::CLI::verbose = $options->{'verbose'};
     my $self  = {
         'opt' => $options,
     };
     bless $self, $class;
 
     # set some env defaults
-    $ENV{'THRUK_SRC'} = 'CLI';
+    $ENV{'THRUK_SRC'}       = 'CLI';
     $ENV{'REMOTE_USER'}     = $options->{'auth'} if defined $options->{'auth'};
     $ENV{'THRUK_BACKENDS'}  = join(',', @{$options->{'backends'}}) if(defined $options->{'backends'} and scalar @{$options->{'backends'}} > 0);
-    $ENV{'THRUK_VERBOSE'}   = $options->{'verbose'} if $options->{'verbose'};
-    $ENV{'THRUK_DEBUG'}     = $options->{'verbose'} if $options->{'verbose'};
+    $ENV{'THRUK_DEBUG'}     = $options->{'verbose'} if $options->{'verbose'} >= 3;
     $options->{'remoteurl_specified'} = 1;
     unless(defined $options->{'remoteurl'}) {
         $options->{'remoteurl_specified'} = 0;
@@ -148,16 +149,17 @@ sub _read_secret {
     my($self) = @_;
     my $files = [];
     push @{$files}, 'thruk.conf';
-    push @{$files}, $ENV{'CATALYST_CONFIG'}.'/thruk.conf'       if defined $ENV{'CATALYST_CONFIG'};
     push @{$files}, 'thruk_local.conf';
+    push @{$files}, $ENV{'CATALYST_CONFIG'}.'/thruk.conf'       if defined $ENV{'CATALYST_CONFIG'};
     push @{$files}, $ENV{'CATALYST_CONFIG'}.'/thruk_local.conf' if defined $ENV{'CATALYST_CONFIG'};
     my $var_path = './var';
-    for my $file (@{$files}) {
+    for my $file (reverse @{$files}) {
         next unless -f $file;
-        open(my $fh, $file);
+        open(my $fh, '<', $file) or die("open file $file failed (id: ".`id -a`.", pwd: ".`pwd`."): ".$!);
         while(my $line = <$fh>) {
             next unless $line =~ m/^\s*var_path\s+=\s*(.*)$/mx;
             $var_path = $1;
+            last if $1;
         }
         Thruk::Utils::IO::close($fh, $file, 1);
     }
@@ -181,10 +183,9 @@ sub _run {
     _debug("_run(): ".Dumper($self->{'opt'}));
     unless($self->{'opt'}->{'local'}) {
         ($result,$response) = $self->_request($self->{'opt'}->{'credential'}, $self->{'opt'}->{'remoteurl'}, $self->{'opt'});
-
         if(!defined $result and $self->{'opt'}->{'remoteurl_specified'}) {
-            _error("remote command failed:");
-            _error($response);
+            _error("requesting result from ".$self->{'opt'}->{'remoteurl'}." failed: ".Thruk::Utils::format_response_error($response));
+            _debug(" -> ".Dumper($response));
             return 1;
         }
     }
@@ -211,7 +212,7 @@ sub _run {
         binmode STDERR;
         print STDERR $result->{'output'};
     }
-    _debug("".$c->stats->report) if defined $c;
+    _trace("".$c->stats->report) if defined $c;
     return $result->{'rc'};
 }
 
@@ -242,7 +243,7 @@ sub _request {
         return($data, $response);
     }
 
-    _error(" -> failed: ".Dumper($response));
+    _debug(" -> failed: ".Dumper($response));
     return(undef, $response);
 }
 
@@ -263,14 +264,15 @@ sub _from_local {
     my($self, $c, $options) = @_;
     _debug("_from_local()");
     $ENV{'NO_EXTERNAL_JOBS'} = 1;
-    return _run_commands($c, $options);
+    return _run_commands($c, $options, 'local');
 }
 
 ##############################################
 sub _from_fcgi {
     my($c, $data_str) = @_;
     confess('no data?') unless defined $data_str;
-    my $data = decode_json($data_str);
+    $data_str = encode_utf8($data_str);
+    my $data  = decode_json($data_str);
     confess('corrupt data?') unless ref $data eq 'HASH';
     $Thruk::Utils::CLI::verbose = $data->{'options'}->{'verbose'} if defined $data->{'options'}->{'verbose'};
     $Thruk::Utils::CLI::c       = $c;
@@ -281,21 +283,32 @@ sub _from_fcgi {
     if(   !defined $c->config->{'secret_key'}
        or !defined $data->{'credential'}
        or $c->config->{'secret_key'} ne $data->{'credential'}) {
+        my $msg = "authorization failed, ". $c->request->uri." does not accept this key.\n";
+        if(!defined $data->{'credential'} or $data->{'credential'} eq '') {
+            $msg = "authorization failed, no auth key specified for ". $c->request->uri."\n";
+        }
         $res = {
             'version' => $c->config->{'version'},
-            'output'  => "authorization failed\n",
+            'branch'  => $c->config->{'branch'},
+            'output'  => $msg,
             'rc'      => 1,
         };
     } else {
-        $res = _run_commands($c, $data->{'options'});
+        $res = _run_commands($c, $data->{'options'}, 'fcgi');
     }
-
-    return encode_json($res);
+    my $res_json;
+    eval {
+        $res_json = encode_json($res);
+    };
+    if($@) {
+        die("unable to encode to json: ".Dumper($res));
+    }
+    return $res_json;
 }
 
 ##############################################
 sub _run_commands {
-    my($c, $opt) = @_;
+    my($c, $opt, $src) = @_;
 
     if(defined $opt->{'auth'}) {
         Thruk::Utils::set_user($c, $opt->{'auth'});
@@ -328,8 +341,14 @@ sub _run_commands {
 
     $c->stats->profile(begin => "_run_commands($action)");
 
+    # raw query
+    if($action eq 'raw') {
+        die('no local raw requests!') if $src ne 'fcgi';
+        ($data->{'output'}, $data->{'rc'}) = _cmd_raw($c, $opt);
+    }
+
     # list backends
-    if($action eq 'listbackends') {
+    elsif($action eq 'listbackends') {
         $data->{'output'} = _cmd_listbackends($c);
     }
 
@@ -369,14 +388,23 @@ sub _run_commands {
     }
 
     # import mongodb logs
-    elsif($action =~ /^importlogs$/mx) {
-        ($data->{'output'}, $data->{'rc'}) = _cmd_import_logs($c, 'import');
+    elsif($action =~ /logcacheimport($|=(\d+))/mx) {
+        ($data->{'output'}, $data->{'rc'}) = _cmd_import_logs($c, 'import', $src, $2, $opt);
     }
-    elsif($action =~ /^updatelogs$/mx) {
-        ($data->{'output'}, $data->{'rc'}) = _cmd_import_logs($c, 'update');
+    elsif($action eq 'logcacheupdate') {
+        ($data->{'output'}, $data->{'rc'}) = _cmd_import_logs($c, 'update', $src);
+    }
+    elsif($action eq 'logcachestats') {
+        ($data->{'output'}, $data->{'rc'}) = _cmd_import_logs($c, 'stats', $src);
+    }
+    elsif($action eq 'logcacheauthupdate') {
+        ($data->{'output'}, $data->{'rc'}) = _cmd_import_logs($c, 'authupdate', $src);
+    }
+    elsif($action =~ /logcacheclean($|=(\d+))/mx) {
+        ($data->{'output'}, $data->{'rc'}) = _cmd_import_logs($c, 'clean', $src, $2);
     }
     else {
-        $data->{'output'} = "FAILED - no such command\n";
+        $data->{'output'} = "FAILED - no such command: ".$action.". Run with --help to see a list of commands.\n";
         $data->{'rc'}     = 1;
     }
 
@@ -392,7 +420,11 @@ sub _cmd_listhosts {
     for my $host (@{$c->{'db'}->get_hosts(sort => {'ASC' => 'name'})}) {
         $output .= $host->{'name'}."\n";
     }
-    return $output;
+
+    # fix encoding
+    utf8::decode($output);
+
+    return encode_utf8($output);
 }
 
 ##############################################
@@ -402,32 +434,41 @@ sub _cmd_listhostgroups {
     for my $group (@{$c->{'db'}->get_hostgroups(sort => {'ASC' => 'name'})}) {
         $output .= $group->{'name'}."\n";
     }
-    return $output;
+
+    # fix encoding
+    utf8::decode($output);
+
+    return encode_utf8($output);
 }
 
 ##############################################
 sub _cmd_listbackends {
     my($c) = @_;
     $c->{'db'}->enable_backends();
-    $c->{'db'}->get_processinfo();
+    eval {
+        $c->{'db'}->get_processinfo();
+    };
+    _debug($@) if $@;
     Thruk::Action::AddDefaults::_set_possible_backends($c, {});
     my $output = '';
     $output .= sprintf("%-4s  %-7s  %-9s   %s\n", 'Def', 'Key', 'Name', 'Address');
-    $output .= sprintf("---------------------------------------\n");
+    $output .= sprintf("-------------------------------------------------\n");
     for my $key (@{$c->stash->{'backends'}}) {
         my $peer = $c->{'db'}->get_peer_by_key($key);
+        my $addr = $c->stash->{'backend_detail'}->{$key}->{'addr'};
+        $addr    =~ s|/cgi-bin/remote.cgi$||mx;
         $output .= sprintf("%-4s %-8s %-10s %s",
                 (!defined $peer->{'hidden'} or $peer->{'hidden'} == 0) ? ' * ' : '',
                 $key,
                 $c->stash->{'backend_detail'}->{$key}->{'name'},
-                $c->stash->{'backend_detail'}->{$key}->{'addr'},
+                $addr,
         );
         my $error = defined $c->stash->{'backend_detail'}->{$key}->{'last_error'} ? $c->stash->{'backend_detail'}->{$key}->{'last_error'} : '';
         chomp($error);
         $output .= " (".$error.")" if $error;
         $output .= "\n";
     }
-    $output .= sprintf("---------------------------------------\n");
+    $output .= sprintf("-------------------------------------------------\n");
     return $output;
 }
 
@@ -461,11 +502,11 @@ sub _request_url {
        and $result->{'headers'}->{'Location'} =~ m|/thruk/cgi\-bin/job\.cgi\?job=(.*)$|mx) {
         my $jobid = $1;
         my $x = 0;
-        while($result->{'code'} == 302) {
+        while($result->{'code'} == 302 or $result->{'result'} =~ m/thruk:\ waiting\ for\ job\ $jobid/mx) {
             my $sleep = 0.1 * $x;
             $sleep = 1 if $x > 10;
             sleep($sleep);
-            $url = $result->{'headers'}->{'Location'};
+            $url = $result->{'headers'}->{'Location'} if defined $result->{'headers'}->{'Location'};
             local $ENV{'REQUEST_URI'}      = $url;
             local $ENV{'SCRIPT_NAME'}      = $url;
                   $ENV{'SCRIPT_NAME'}      =~ s/\?(.*)$//gmx;
@@ -492,12 +533,14 @@ sub _request_url {
         return $txt;
     }
     elsif($result->{'code'} == 500) {
-        my $txt = 'request failed: '.$result->{'code'}."\ninternal error, please consult your logfiles\n";
+        my $txt = 'request failed: '.$result->{'code'}." - internal error, please consult your logfiles\n";
+        _debug(Dumper($result));
         return($result->{'code'}, $result, $txt) if wantarray;
         return $txt;
     }
     elsif($result->{'code'} != 200) {
-        my $txt = 'request failed: '.$result->{'code'}."\n".Dumper($result);
+        my $txt = 'request failed: '.$result->{'code'}." - ".$result->{'result'}."\n";
+        _debug(Dumper($result));
         return($result->{'code'}, $result, $txt) if defined wantarray;
         return $txt;
     }
@@ -512,11 +555,23 @@ sub _error {
 }
 
 ##############################################
+sub _info {
+    return _debug($_[0],'info');
+}
+
+##############################################
+sub _trace {
+    return _debug($_[0],'trace');
+}
+
+##############################################
 sub _debug {
     my($data, $lvl) = @_;
     return unless defined $data;
     $lvl = 'DEBUG' unless defined $lvl;
-    return if($Thruk::Utils::CLI::verbose <= 0 and uc($lvl) ne 'ERROR');
+    return if($Thruk::Utils::CLI::verbose < 3 and uc($lvl) eq 'TRACE');
+    return if($Thruk::Utils::CLI::verbose < 2 and uc($lvl) eq 'DEBUG');
+    return if($Thruk::Utils::CLI::verbose < 1 and uc($lvl) eq 'INFO');
     if(ref $data) {
         return _debug(Dumper($data), $lvl);
     }
@@ -578,11 +633,12 @@ sub _cmd_report {
             return("cannot send mail\n", 1)
         }
     } else {
-        my $pdf_file = Thruk::Utils::Reports::generate_report($c, $nr);
-        if(defined $pdf_file) {
-            $output = read_file($pdf_file);
+        my $report_file = Thruk::Utils::Reports::generate_report($c, $nr);
+        if(defined $report_file and -f $report_file) {
+            $output = read_file($report_file);
         } else {
-            return("generating pdf failed\n", 1)
+            my $errors = read_file($c->config->{'tmp_path'}.'/reports/'.$nr.'.log');
+            return("generating report failed:\n".$errors, 1)
         }
     }
 
@@ -665,8 +721,23 @@ sub _cmd_url {
 
 ##############################################
 sub _cmd_import_logs {
-    my($c, $mode) = @_;
+    my($c, $mode, $src, $blocksize, $opt) = @_;
     $c->stats->profile(begin => "_cmd_import_logs()");
+
+    if($src ne 'local' and $mode eq 'import') {
+        return("ERROR - please run the initial import with --local\n", 1);
+    }
+    if($mode eq 'import' and !$opt->{'yes'}) {
+        print "import removes current data and imports all logfile data, continue? [n]: ";
+        my $buf;
+        sysread STDIN, $buf, 1;
+        if($buf !~ m/^(y|j)/mxi) {
+            return("canceled\n", 1);
+        }
+    }
+
+    my $verbose = 0;
+    $verbose = 1 if $src eq 'local';
 
     eval {
         require Thruk::Backend::Provider::Mongodb;
@@ -680,10 +751,179 @@ sub _cmd_import_logs {
         return("FAILED - logcache is not enabled\n", 1);
     }
 
-    my($backend_count, $log_count) = Thruk::Backend::Provider::Mongodb->_import_logs($c, $mode);
+    if($mode eq 'stats') {
+        my $stats = Thruk::Backend::Provider::Mongodb->_log_stats($c);
+        $c->stats->profile(end => "_cmd_import_logs()");
+        return($stats."\n", 0);
+    } else {
+        my $t1 = time();
+        my($backend_count, $log_count) = Thruk::Backend::Provider::Mongodb->_import_logs($c, $mode, $verbose, undef, $blocksize);
+        my $t2 = time();
+        $c->stats->profile(end => "_cmd_import_logs()");
+        my $action = "imported";
+        $action    = "updated" if $mode eq 'authupdate';
+        $action    = "removed" if $mode eq 'clean';
+        return('OK - '.$action.' '.$log_count.' log items from '.$backend_count.' site'.($backend_count == 1 ? '' : 's')." successfully in ".($t2-$t1)."s\n", 0);
+    }
+}
 
-    $c->stats->profile(end => "_cmd_import_logs()");
-    return('OK - imported '.$log_count.' log items from '.$backend_count.' site'.($backend_count == 1 ? '' : 's')." successfully\n", 0);
+##########################################################
+sub _cmd_configtool {
+    my($c, $peerkey, $opt) = @_;
+    my $res        = undef;
+    my $last_error = undef;
+    my $peer       = $Thruk::peers->{$peerkey};
+    $c->stash->{'param_backend'} = $peerkey;
+
+    if(!Thruk::Utils::Conf::set_object_model($c)) {
+        return("failed to set objects model", 1);
+    }
+    # outgoing file sync
+    elsif($opt->{'args'}->{'sub'} eq 'syncfiles') {
+        $c->{'obj_db'}->check_files_changed();
+        my $transfer    = {};
+        my $remotefiles = $opt->{'args'}->{'args'}->{'files'};
+        for my $f (@{$c->{'obj_db'}->{'files'}}) {
+            $transfer->{$f->{'path'}} = { mtime => $f->{'mtime'} };
+            if(!defined $remotefiles->{$f->{'path'}}->{'mtime'}
+               or $f->{'mtime'} != $remotefiles->{$f->{'path'}}->{'mtime'}) {
+                $transfer->{$f->{'path'}}->{'content'} = read_file($f->{'path'});
+            }
+        }
+        $res = $transfer;
+    }
+    # some settings
+    elsif($opt->{'args'}->{'sub'} eq 'configsettings') {
+        $res = {
+            'files_root' => $c->{'obj_db'}->get_files_root(),
+        };
+    }
+    # run config check
+    elsif($opt->{'args'}->{'sub'} eq 'configcheck') {
+        my $jobid = Thruk::Utils::External::cmd($c, { cmd => $c->{'obj_db'}->{'config'}->{'obj_check_cmd'}." 2>&1", 'background' => 1 });
+        $res = 'jobid:'.$jobid;
+    }
+    # reload configuration
+    elsif($opt->{'args'}->{'sub'} eq 'configreload') {
+        my $jobid = Thruk::Utils::External::cmd($c, { cmd => $c->{'obj_db'}->{'config'}->{'obj_reload_cmd'}." 2>&1", 'background' => 1 });
+        $res = 'jobid:'.$jobid;
+    }
+    # save incoming config changes
+    elsif($opt->{'args'}->{'sub'} eq 'configsave') {
+        my $changed = $opt->{'args'}->{'args'}->{'changed'};
+        # changed and new files
+        for my $f (@{$changed}) {
+            my($path,$content, $mtime) = @{$f};
+            next if $path =~ m|/../|gmx; # no relative paths
+            my $file = $c->{'obj_db'}->get_file_by_path($path);
+            if($file and !$file->readonly()) {
+                # update file
+                Thruk::Utils::IO::write($path, $content, $mtime);
+            } elsif(!$file) {
+                # new file
+                my $filesroot = $c->{'obj_db'}->get_files_root();
+                if($path =~ m/^\Q$filesroot\E/mx) {
+                    $file = Monitoring::Config::File->new($path, $c->{'obj_db'}->{'config'}->{'obj_readonly'}, $c->{'obj_db'}->{'coretype'});
+                    if(defined $file and !$file->readonly()) {
+                        Thruk::Utils::IO::write($path, $content, $mtime);
+                    }
+                }
+            }
+        }
+        # deleted files
+        my $deleted = $opt->{'args'}->{'args'}->{'deleted'};
+        for my $f (@{$deleted}) {
+            my $file = $c->{'obj_db'}->get_file_by_path($f);
+            if($file and !$file->readonly()) {
+                unlink($f);
+            }
+        }
+        $res = "saved";
+    } else {
+        return("unknown configtool command", 1);
+    }
+    return([undef, 1, $res, $last_error], 0);
+}
+
+##############################################
+sub _cmd_raw {
+    my($c, $opt) = @_;
+    my $function  = $opt->{'sub'};
+
+    unless(defined $c->stash->{'defaults_added'}) {
+        Thruk::Action::AddDefaults::add_defaults(1, undef, "Thruk::Controller::remote", $c);
+    }
+    my @keys = keys %{$Thruk::peers};
+    my $key = $keys[0];
+    # do we have a hint about remote peer?
+    if($opt->{'remote_name'}) {
+        my $peer = $c->{'db'}->get_peer_by_name($opt->{'remote_name'});
+        die('no such backend: '.$opt->{'remote_name'}) unless defined $peer;
+        $key = $peer->peer_key();
+    } else {
+        $key = $keys[0];
+    }
+    die("no backends...") unless $key;
+
+    if($function eq 'get_logs' or $function eq '_get_logs_start_end') {
+        $c->{'db'}->renew_logcache($c);
+    }
+
+    # config tool commands
+    elsif($function eq 'configtool') {
+        return _cmd_configtool($c, $key, $opt);
+    }
+
+    # result for external job
+    elsif($function eq 'job') {
+        return _cmd_ext_job($c, $key, $opt);
+    }
+
+    my @res = Thruk::Backend::Manager::_do_on_peer($key, $function, $opt->{'args'});
+    my $res = shift @res;
+
+    # add proxy version to processinfo
+    if($function eq 'get_processinfo' and defined $res and ref $res eq 'ARRAY' and defined $res->[2] and ref $res->[2] eq 'HASH') {
+        $res->[2]->{$key}->{'data_source_version'} .= ' (via Thruk '.$c->config->{'version'}.($c->config->{'branch'}? '~'.$c->config->{'branch'} : '').')';
+
+        # add config tool settings
+        if($Thruk::peers->{$key}->{'config'}->{'configtool'}) {
+            $res->[2]->{$key}->{'configtool'} = {
+                'obj_readonly'   => $Thruk::peers->{$key}->{'config'}->{'configtool'}->{'obj_readonly'},
+                'obj_check_cmd'  => exists $Thruk::peers->{$key}->{'config'}->{'configtool'}->{'obj_check_cmd'},
+                'obj_reload_cmd' => exists $Thruk::peers->{$key}->{'config'}->{'configtool'}->{'obj_reload_cmd'},
+            };
+        }
+    }
+
+    # remove useless mongodb _id if using logcache
+    if($function eq 'get_logs' and $c->config->{'logcache'} and defined $res and ref $res eq 'ARRAY' and defined $res->[2] and ref $res->[2] eq 'ARRAY') {
+        for (@{$res->[2]}) { delete $_->{'_id'} }
+    }
+
+    return($res, 0);
+}
+
+##############################################
+sub _cmd_ext_job {
+    my($c, $key, $opt) = @_;
+    my $jobid       = $opt->{'args'};
+    my $res         = "";
+    my $last_error  = "";
+    if(Thruk::Utils::External::is_running($c, $jobid, 1)) {
+        $res = "jobid:".$jobid.":0";
+    }
+    else {
+        my($out,$err,$time,$dir,$stash,$rc) = Thruk::Utils::External::get_result($c, $jobid, 1);
+        $res = {
+            'out'   => $out,
+            'err'   => $err,
+            'time'  => $time,
+            'dir'   => $dir,
+            'rc'    => $rc,
+        };
+    }
+    return([undef, 1, $res, $last_error], 0);
 }
 
 ##############################################

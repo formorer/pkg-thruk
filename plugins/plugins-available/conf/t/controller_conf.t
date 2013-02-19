@@ -2,11 +2,14 @@ use strict;
 use warnings;
 use Test::More;
 use JSON::XS;
+use Thruk::Config;
+use Data::Dumper;
 use Encode qw(encode_utf8 decode_utf8);
 
 BEGIN {
-    plan skip_all => 'backends required' if(!-f 'thruk_local.conf' and !defined $ENV{'CATALYST_SERVER'});
-    plan tests => 1037;
+    plan skip_all => 'backends required' if(!-s 'thruk_local.conf' and !defined $ENV{'CATALYST_SERVER'});
+    plan tests => 1136 if !defined $ENV{'CATALYST_SERVER'};
+    plan tests => 1137 if  defined $ENV{'CATALYST_SERVER'};
 }
 
 BEGIN {
@@ -42,6 +45,23 @@ TestUtils::test_page(
 );
 
 ###########################################################
+# test connection check
+my $config = Thruk::Config::get_config();
+my $firstbackend;
+if(ref $config->{'Thruk::Backend'}->{'peer'} eq 'HASH') { $config->{'Thruk::Backend'}->{'peer'} = [$config->{'Thruk::Backend'}->{'peer'}]; }
+for my $p (@{$config->{'Thruk::Backend'}->{'peer'}}) {
+    if(!$p->{'hidden'} and lc($p->{'type'}) ne 'configonly') { $firstbackend = $p; last }
+}
+my $options = "";
+for my $opt (keys %{$firstbackend->{'options'}}) {
+    $options .= '&'.$opt.'='.$firstbackend->{'options'}->{$opt};
+}
+TestUtils::test_page(
+    'url'     => '/thruk/cgi-bin/conf.cgi?action=check_con&sub=backends&type='.$firstbackend->{'type'}.$options,
+    'like'    => '"ok" : 1',
+);
+
+###########################################################
 # test some pages
 my $pages = [
     '/thruk/cgi-bin/conf.cgi',
@@ -64,11 +84,16 @@ my $pages = [
     '/thruk/cgi-bin/conf.cgi?sub=objects&action=listref&data.name='.$host,
     '/thruk/cgi-bin/conf.cgi?sub=objects&tools=start',
     '/thruk/cgi-bin/conf.cgi?sub=objects&tools=check_object_references',
+    '/thruk/cgi-bin/conf.cgi?sub=objects&action=tree',
+    '/thruk/cgi-bin/conf.cgi?sub=objects&action=tree_objects&type=command',
     '/thruk/cgi-bin/conf.cgi?sub=backends',
+    { url => '/thruk/cgi-bin/conf.cgi?sub=thruk&action=store', 'startup_to_url' => '/thruk/cgi-bin/conf.cgi?sub=thruk', 'follow' => 1 },
 ];
 
 for my $type (@{$Monitoring::Config::Object::Types}) {
-    push @{$pages}, '/thruk/cgi-bin/conf.cgi?sub=objects&type='.$type,
+    push @{$pages}, '/thruk/cgi-bin/conf.cgi?sub=objects&type='.$type;
+    my $img = "plugins/plugins-available/conf/root/images/obj_".$type.".png";
+    ok(-f $img, "object image $img exists");
 }
 
 for my $url (@{$pages}) {
@@ -78,7 +103,6 @@ for my $url (@{$pages}) {
 
 my $redirects = [
     '/thruk/cgi-bin/conf.cgi?sub=cgi&action=store',
-    '/thruk/cgi-bin/conf.cgi?sub=thruk&action=store',
     '/thruk/cgi-bin/conf.cgi?sub=users&action=store&data.username=testuser',
     '/thruk/cgi-bin/conf.cgi?sub=objects&action=revert&type=host&data.name='.$host,
 ];
@@ -90,7 +114,7 @@ for my $url (@{$redirects}) {
 }
 
 # json export
-for my $type (@{$Monitoring::Config::Object::Types}, 'icon') {
+for my $type (@{$Monitoring::Config::Object::Types}) {
     my $page = TestUtils::test_page(
         'url'          => '/thruk/cgi-bin/conf.cgi?action=json&type='.$type,
         'content_type' => 'application/json; charset=utf-8',
@@ -98,11 +122,7 @@ for my $type (@{$Monitoring::Config::Object::Types}, 'icon') {
     my $data = decode_json($page->{'content'});
     is(ref $data, 'ARRAY', "json result is an array") or diag("got: ".Dumper($data));
     next if $type eq 'module';
-    if($type eq 'icon') {
-        ok(scalar @{$data} == 1, "json result size is: ".(scalar @{$data}));
-    } else {
-        ok(scalar @{$data} == 2, "json result size is: ".(scalar @{$data}));
-    }
+    ok(scalar @{$data} == 2, "json result size is: ".(scalar @{$data}));
 
     is($data->[0]->{'name'}, $type."s", "json result has correct type");
     my $min = 1;
@@ -110,8 +130,6 @@ for my $type (@{$Monitoring::Config::Object::Types}, 'icon') {
         $min = 0;
     }
     ok(scalar @{$data->[0]->{'data'}} >= $min, "json result for ".$type." has data ( >= $min )");
-
-    next if $type eq 'icon';
 
     $data->[0]->{'data'}->[0] = "none" unless defined $data->[0]->{'data'}->[0];
     $data->[0]->{'data'}->[0] = encode_utf8($data->[0]->{'data'}->[0]);
@@ -127,3 +145,34 @@ for my $type (@{$Monitoring::Config::Object::Types}, 'icon') {
         'like'    => [ 'Config Tool', "new $type"],
     );
 }
+
+# other json pages
+my $plugin = "";
+my $other_json = [
+    { url => '/thruk/cgi-bin/conf.cgi?action=json&type=dig&host=localhost',           like => '"address" :', jtype => 'HASH' },
+    { url => '/thruk/cgi-bin/conf.cgi?action=json&type=icon',                         like => '"icons"' },
+    { url => '/thruk/cgi-bin/conf.cgi?action=json&type=plugin',                       like => '"plugins"' },
+    { url => '/thruk/cgi-bin/conf.cgi?action=json&type=macro',                        like => [ '"macros"', 'HOSTADDRESS'] },
+    { url => '/thruk/cgi-bin/conf.cgi?action=json&type=pluginhelp&plugin=##PLUGIN##', like => '"plugin_help" :' },
+    { url => '/thruk/cgi-bin/conf.cgi?action=json&type=pluginpreview',                like => '"plugin_output" :' },
+];
+for my $url (@{$other_json}) {
+    $url->{'url'} =~ s/\#\#PLUGIN\#\#/$plugin/gmx;
+    my $test = TestUtils::make_test_hash($url, {'content_type' => 'application/json; charset=utf-8'});
+    my $page = TestUtils::test_page(%{$test});
+    my $data = decode_json($page->{'content'});
+    $url->{'jtype'} = 'ARRAY' unless defined $url->{'jtype'};
+    is(ref $data, $url->{'jtype'}, "json result ref is ".$url->{'jtype'}) or diag("got: ".Dumper($data));
+    if($url->{'jtype'} eq 'ARRAY') {
+        ok(scalar @{$data} == 1, "json result size is: ".(scalar @{$data}));
+    }
+
+    if(ref $data eq 'ARRAY' 
+       and defined $data->[0]->{'name'} 
+       and $data->[0]->{'name'} eq 'plugins'
+       and defined $data->[0]->{'data'}->[0]
+    ) {
+        $plugin = $data->[0]->{'data'}->[0];
+    }
+}
+

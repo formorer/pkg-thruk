@@ -1,4 +1,4 @@
-/* send debug output to firebug console */
+﻿/* send debug output to firebug console */
 function debug(str) {
     if (window.console != undefined) {
         console.debug(str);
@@ -356,7 +356,7 @@ var TP = {
         cp.clearAll();
         cp.loadData(data);
         Ext.getCmp('viewport').add(new TP.TabBar());
-        window.location.reload();
+        window.setTimeout("window.location.reload()", 1000);
     },
     /* eval response data */
     getResponse: function(panlet, response) {
@@ -377,8 +377,8 @@ var TP = {
             /* extract pi details */
             if(data.pi_detail != undefined) {
                 for(var key in data.pi_detail) {
-                    initial_backends[key].state         = data.pi_detail[key].state;
-                    initial_backends[key].program_start = data.pi_detail[key].program_start;
+                    initial_backends[key].state         = data.pi_detail[key]['state'];
+                    initial_backends[key].program_start = data.pi_detail[key]['program_start'];
                 }
             }
             /* contains a message? */
@@ -386,9 +386,7 @@ var TP = {
             if(msg) {
                 TP.Msg.msg(msg);
                 // clear message
-                var now = new Date();
-                var expires = new Date(now.getTime() - (10*365*86400*1000)); // let the cookie expire 10 year ago
-                Ext.util.Cookies.set('thruk_message', null, expires);
+                Ext.util.Cookies.clear('thruk_message', '[% cookie_path %]');
             }
             if(data.errors) {
                 for(var nr in data.errors) {
@@ -527,7 +525,7 @@ var TP = {
     unload: function() {
         try {
             // try saving state
-            cp.saveChanges();
+            cp.saveChanges(false);
         }
         catch(e) {}
     },

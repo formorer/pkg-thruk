@@ -1,11 +1,12 @@
 Name:          thruk
-Version:       1.52
-Release:       1%{?dist}
+Version:       1.64
+Release: 1%{?dist}
 License:       GPLv2+
 Packager:      Sven Nierlein <sven.nierlein@consol.de>
 Vendor:        Labs Consol
 URL:           http://thruk.org
 Source0:       thruk-%{version}.tar.gz
+Source1:       wkhtmltopdf
 Group:         Applications/Monitoring
 BuildRoot:     %{_tmppath}/%{name}-%{version}-root-%(%{__id_u} -n)
 BuildRequires: autoconf, automake, perl
@@ -14,13 +15,12 @@ AutoReqProv:   no
 Patch0:        0001-thruk.conf.patch
 Patch1:        0002-log4perl.conf.patch
 Patch2:        0004-thruk_fastcgi.pl.patch
-Patch3:        0005-thruk_script.patch
 Requires(pre): shadow-utils
 Requires:      perl logrotate gd
 %if %{defined suse_version}
-Requires: apache2 apache2-mod_fcgid cron
+Requires: apache2 apache2-mod_fcgid cron cairo wget xorg-x11-server-extra
 %else
-Requires: httpd mod_fcgid
+Requires: httpd mod_fcgid cairo wget xorg-x11-server-Xvfb libXext dejavu-serif-fonts
 %endif
 
 %description
@@ -30,14 +30,17 @@ API. It is designed to be a 'dropin' replacement and covers almost
 all of the original features plus adds additional enhancements for
 large installations.
 
+# disable binary striping
+%global __os_install_post %{nil}
+
 %prep
 rm -rf %{buildroot}
 %setup -q
 %patch0 -p1
 %patch1 -p1
 %patch2 -p1
-%patch3 -p1
 find . -name \*.orig -delete
+cp %{SOURCE1} script/
 
 %build
 yes n | perl Makefile.PL
@@ -111,6 +114,8 @@ cp %{buildroot}%{_sysconfdir}/thruk/ssi/status-header.ssi     %{buildroot}%{_sys
 mv %{buildroot}%{_datadir}/thruk/support/thruk_local.conf.example %{buildroot}%{_sysconfdir}/thruk/thruk_local.conf
 mv %{buildroot}%{_datadir}/thruk/support/fcgid_env.sh %{buildroot}%{_datadir}/thruk/fcgid_env.sh
 mv %{buildroot}%{_datadir}/thruk/script/thruk %{buildroot}%{_bindir}/thruk
+mv %{buildroot}%{_datadir}/thruk/script/naglint %{buildroot}%{_bindir}/naglint
+mv %{buildroot}%{_datadir}/thruk/script/nagexp %{buildroot}%{_bindir}/nagexp
 %if %{defined suse_version}
 mv %{buildroot}%{_datadir}/thruk/support/apache_fcgid.conf %{buildroot}%{_sysconfdir}/apache2/conf.d/thruk.conf
 %else
@@ -123,6 +128,8 @@ mv %{buildroot}%{_datadir}/thruk/support/thruk.logrotate %{buildroot}%{_sysconfd
 %{__rm} -rf %{buildroot}%{_datadir}/thruk/support
 mv %{buildroot}%{_datadir}/thruk/docs/thruk.3 %{buildroot}%{_mandir}/man3/thruk.3
 mv %{buildroot}%{_datadir}/thruk/docs/thruk.8 %{buildroot}%{_mandir}/man8/thruk.8
+mv %{buildroot}%{_datadir}/thruk/docs/naglint.3 %{buildroot}%{_mandir}/man3/naglint.3
+mv %{buildroot}%{_datadir}/thruk/docs/nagexp.3 %{buildroot}%{_mandir}/man3/nagexp.3
 %{__rm} -rf %{buildroot}%{_datadir}/thruk/debian
 %{__rm} -rf %{buildroot}%{_sysconfdir}/thruk/ssi/README
 %{__rm} -rf %{buildroot}%{_datadir}/thruk/root/thruk/plugins
@@ -146,20 +153,6 @@ exit 0
 
 %post
 chkconfig --add thruk
-# restore themes and plugins
-if [ -d /tmp/thruk_update/themes/. ]; then
-  rm -f /etc/thruk/themes/themes-enabled/*
-  cp -rp /tmp/thruk_update/themes/* /etc/thruk/themes/themes-enabled/
-fi
-if [ -d /tmp/thruk_update/plugins/. ]; then
-  rm -f /etc/thruk/plugins/plugins-enabled/*
-  cp -rp /tmp/thruk_update/plugins/* /etc/thruk/plugins/plugins-enabled/
-fi
-if [ -d /tmp/thruk_update/ssi/. ]; then
-  rm -f /etc/thruk/ssi/*
-  cp -rp /tmp/thruk_update/ssi/* /etc/thruk/ssi/
-fi
-rm -rf /tmp/thruk_update
 mkdir -p /var/lib/thruk /var/cache/thruk/reports /var/log/thruk
 %if %{defined suse_version}
 chown -R wwwrun: /var/lib/thruk /var/cache/thruk /var/log/thruk /etc/thruk/plugins/plugins-enabled /etc/thruk/thruk_local.conf
@@ -173,10 +166,33 @@ a2enmod rewrite
 chown -R apache: /var/lib/thruk /var/cache/thruk /var/log/thruk /etc/thruk/plugins/plugins-enabled /etc/thruk/thruk_local.conf
 /etc/init.d/httpd restart || /etc/init.d/httpd start
 /usr/bin/crontab -l -u apache 2>/dev/null | /usr/bin/crontab -u apache -
+if [ "$(getenforce 2>/dev/null)" = "Enforcing" ]; then
+  echo "******************************************";
+  echo "Thruk will not work when SELinux is enabled";
+  echo "SELinux: "$(getenforce);
+  echo "******************************************";
+fi
 %endif
 /usr/bin/thruk -a installcron --local > /dev/null
 echo "Thruk has been configured for http://$(hostname)/thruk/. User and password is 'thrukadmin'."
 exit 0
+
+%posttrans
+# restore themes and plugins
+if [ -d /tmp/thruk_update/themes/. ]; then
+  rm -f /etc/thruk/themes/themes-enabled/*
+  cp -rp /tmp/thruk_update/themes/* /etc/thruk/themes/themes-enabled/
+fi
+if [ -d /tmp/thruk_update/plugins/. ]; then
+  rm -f /etc/thruk/plugins/plugins-enabled/*
+  cp -rp /tmp/thruk_update/plugins/* /etc/thruk/plugins/plugins-enabled/
+fi
+ls -la /etc/thruk/plugins/plugins-enabled/
+if [ -d /tmp/thruk_update/ssi/. ]; then
+  rm -f /etc/thruk/ssi/*
+  cp -rp /tmp/thruk_update/ssi/* /etc/thruk/ssi/
+fi
+rm -rf /tmp/thruk_update
 
 %preun
 if [ $1 = 0 ]; then
@@ -184,22 +200,28 @@ if [ $1 = 0 ]; then
     /usr/bin/thruk -a uninstallcron --local
 fi
 /etc/init.d/thruk stop
-chkconfig --del thruk
+chkconfig --del thruk >/dev/null 2>&1
 exit 0
 
 %postun
 case "$*" in
   0)
     # POSTUN
-    rm -rf %{_localstatedir}/cache/thruk/*
+    rm -rf %{_localstatedir}/cache/thruk
     rm -f %{_datadir}/thruk/root/thruk/plugins/*
     %{insserv_cleanup}
     ;;
   1)
     # POSTUPDATE
     rm -rf %{_localstatedir}/cache/thruk/*
+    mkdir -p /var/cache/thruk/reports
+%if %{defined suse_version}
+chown -R wwwrun: /var/cache/thruk
+%else
+chown -R apache: /var/cache/thruk
+%endif
     ;;
-  *) echo case "$*" not handled in preun
+  *) echo case "$*" not handled in postun
 esac
 exit 0
 
@@ -208,6 +230,8 @@ exit 0
 
 %files
 %attr(755,root,root) %{_bindir}/thruk
+%attr(755,root,root) %{_bindir}/naglint
+%attr(755,root,root) %{_bindir}/nagexp
 %attr(755,root,root) %{_initrddir}/thruk
 %config %{_sysconfdir}/thruk/thruk.conf
 %config(noreplace) %{_sysconfdir}/thruk/thruk_local.conf
@@ -228,6 +252,7 @@ exit 0
 /usr/lib/thruk/perl5
 %doc %{_mandir}/man8/thruk.*
 %doc %{_mandir}/man3/thruk.*
+%doc %{_mandir}/man3/nag*.*
 
 %if %{defined suse_version}
 %attr(755,wwwrun,root) %{_localstatedir}/lib/thruk

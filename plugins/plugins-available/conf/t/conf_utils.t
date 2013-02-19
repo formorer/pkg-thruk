@@ -7,8 +7,8 @@ use Storable qw/ dclone /;
 use File::Slurp;
 
 BEGIN {
-    plan skip_all => 'backends required' if(!-f 'thruk_local.conf' and !defined $ENV{'CATALYST_SERVER'});
-    plan tests => 367;
+    plan skip_all => 'backends required' if(!-s 'thruk_local.conf' and !defined $ENV{'CATALYST_SERVER'});
+    plan tests => 380;
 }
 
 BEGIN {
@@ -24,6 +24,7 @@ if(defined $ENV{'CATALYST_SERVER'}) {
 }
 use_ok 'Monitoring::Config';
 use_ok 'Monitoring::Config::Help';
+use_ok 'Monitoring::Config::Object';
 use_ok 'Thruk::Utils::Conf::Defaults';
 use_ok 'Thruk::Utils::Conf';
 
@@ -69,6 +70,20 @@ $got  = Thruk::Utils::Conf::merge_conf($conf_in, $data);
 is($got, $conf_exp, "merge config II");
 
 ###########################################################
+# _array_diff
+my $a1 = [1]; my $a2 = [];
+is(Monitoring::Config->_array_diff($a1, $a2), 1, '_list 1');
+
+$a1 = [1]; $a2 = undef;
+is(Monitoring::Config->_array_diff($a1, $a2), 1, '_list 2');
+
+$a1 = [1]; $a2 = [1,2];
+is(Monitoring::Config->_array_diff($a1, $a2), 1, '_list 3');
+
+$a1 = [1,2]; $a2 = [1,2];
+is(Monitoring::Config->_array_diff($a1, $a2), 0, '_list 4');
+
+###########################################################
 # test reading htpasswd
 my $expected = { "testuser" => "zTOzpj/AEVckE" };
 my($fh, $filename) = File::Temp::tempfile();
@@ -111,7 +126,7 @@ for my $type (@{$Monitoring::Config::Object::Types}) {
 my $objects = Monitoring::Config->new({ obj_dir => './t/xt/conf/data/1' });
 $objects->init();
 isa_ok( $objects, 'Monitoring::Config' );
-is( scalar @{ $objects->{'files'} }, 1, 'number of files parsed' ) or BAIL_OUT("useless without parsed files");
+is( scalar @{ $objects->{'files'} }, 1, 'number of files parsed' ) or BAIL_OUT("useless without parsed files:\n".Dumper($objects));
 my $parsedfile = $objects->{'files'}->[0];
 is( $parsedfile->{'md5'}, 'bf6f91fcc7c569f4cc96bcdf8e926811', 'files md5 sum' );
 like( $parsedfile->{'parse_errors'}->[0], '/unknown object type \'blah\'/', 'parse error' );
@@ -136,13 +151,13 @@ my $keys = $obj->get_sorted_keys();
 my $exp_keys = [
            'host_name',
            'alias',
-           'use',
            'address',
+           'parents',
+           'use',
            'contact_groups',
            'hostgroups',
            'icon_image',
            'icon_image_alt',
-           'parents',
            '_CUST1',
            '_CUST2',
            '_CUST3',
@@ -289,3 +304,30 @@ $objects->init();
 $objs = $objects->get_objects();
 is(scalar @{$objects->{'errors'}}, 0, "number of errors") or diag(Dumper($objects->{'errors'}));
 is(scalar @{$objs}, 2, "number of objects");
+
+###########################################################
+# commented objects
+$objects = Monitoring::Config->new({ obj_dir => './t/xt/conf/data/8/' });
+$objects->init();
+$objs = $objects->get_objects();
+is(scalar @{$objects->{'errors'}}, 0, "number of errors") or diag(Dumper($objects->{'errors'}));
+is(scalar @{$objects->{'parse_errors'}}, 0, "number of parse errors") or diag(Dumper($objects->{'parse_errors'}));
+is(scalar @{$objs}, 2, "number of objects");
+@{$objs} = sort {uc($a->get_name()) cmp uc($b->get_name())} @{$objs};
+is($objs->[0]->{'disabled'}, 0, "first object is enabled");
+is($objs->[1]->{'disabled'}, 1, "second object is disabled");
+
+###########################################################
+my @comments = split/\n/mx,"
+###############################################################################
+#
+# SERVICES
+#
+#    http://nagios.sourceforge.net/docs/2_0/xodtemplate.html#service
+#
+###############################################################################
+###BLAH by BLUB
+#";
+my $orig_comments = dclone(\@comments);
+my $com = Monitoring::Config::Object::format_comments(\@comments);
+is_deeply($orig_comments, \@comments, 'comments shouldn\'t change');

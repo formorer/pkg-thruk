@@ -72,8 +72,9 @@ function add_conf_attribute(table, key, rt) {
     // return id of new added input
     if(rt != undefined && rt == true) {
         var inp     = newObj.cells[2].innerHTML;
-        var matches = inp.match(/id="(.*?)"/);
+        var matches = inp.match(/id=([^\s]+?)\s/);
         if(matches != null) {
+            var id = matches[1].replace('"', '');
             return matches[1];
         }
     }
@@ -101,8 +102,21 @@ function remove_conf_attribute(key, nr) {
 
 /* initialize all buttons */
 function init_conf_tool_buttons() {
+    jQuery('INPUT.conf_button').button();
+    jQuery('BUTTON.conf_button').button();
+    jQuery('.radioset').buttonset();
+
     jQuery('.conf_save_button').button({
         icons: {primary: 'ui-save-button'}
+    });
+    jQuery('.conf_apply_button').button({
+        icons: {primary: 'ui-apply-button'}
+    });
+    jQuery('.conf_back_button').button({
+        icons: {primary: 'ui-l-arrow-button'}
+    });
+    jQuery('.conf_save_reload_button').button({
+        icons: {primary: 'ui-save_reload-button'}
     });
 
     jQuery('.conf_preview_button').button({
@@ -260,7 +274,7 @@ function update_command_line(id) {
     // not a full command
     if(ajax_search && ajax_search.base && ajax_search.base[0] && ajax_search.base[0].data) {
         var found = 0;
-        ajax_search.base[0].data.each(function(elem) {
+        jQuery.each(ajax_search.base[0].data, function(nr, elem) {
             if(elem == cmd_name) { found++; }
         });
         if(found == 0) {
@@ -610,9 +624,9 @@ function new_attr_filter(str) {
 /* new attribute onselect */
 var newid, inp;
 function on_attr_select() {
-    newid = add_conf_attribute('attr_table', jQuery('#newattr').val(),true);
+    newid = "#"+add_conf_attribute('attr_table', jQuery('#newattr').val(),true).replace(/"/g, '');
     ajax_search.reset();
-    window.setTimeout('jQuery(\'#\'+newid).focus()', 300);
+    window.setTimeout('ajax_search.hide_results(null, 1);jQuery(\''+newid+'\').focus();', 300);
     return newid;
 }
 
@@ -622,6 +636,7 @@ function on_empty_click(inp) {
     var v = input.value;
     input.value = 'customvariable';
     newid = on_attr_select();
+    newid = newid.replace(/^#/, '');
     var newin = document.getElementById(newid);
     var tr = newin.parentNode.parentNode;
     var td = tr.cells[0].firstChild;
@@ -631,4 +646,14 @@ function on_empty_click(inp) {
     }
     newin.name = 'obj.'+td.value;
     return false;
+}
+
+/* validate objects edit form */
+function conf_validate_object_form(f) {
+    var fileselect = jQuery(f).find('#fileselect').first().val();
+    if(fileselect != undefined && fileselect == "") {
+        alert("please enter filename for this object.");
+        return false;
+    }
+    return true;
 }

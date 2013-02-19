@@ -122,14 +122,6 @@ th.status a:hover {
   text-decoration: underline;
 }
 
-.tableRowHover {
-  background-color:#88BBD8;
-}
-.tableRowSelected {
-  background-color:#609FD2;
-  height: 22px;
-}
-
 /* fix for navigation table header */
 div.tree td {
   line-height: 3px;
@@ -159,13 +151,11 @@ SELECT#dfl_s0_style_selector, INPUT#dfl_s0_btn_accept_search {
   width: 120px;
 }
 
+/*
 .tableRowHover {
     height: 22px;
 }
-
-input#NavBarSearchItem {
-  width:105px;
-}
+*/
 
 div.dTreeNode {
     white-space: nowrap;
@@ -254,4 +244,15 @@ TABLE.extdetails DIV.flapdetectionDISABLED,
 TABLE.extdetails DIV.flapdetectionENABLED
 {
   text-align: center;
+}
+
+.tableRowSelected {
+  background-color:#609FD2d;
+}
+
+#search-results {
+  line-height: 12px;
+}
+input.NavBarSearchItem {
+  width:105px;
 }

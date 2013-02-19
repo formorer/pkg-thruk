@@ -1,10 +1,10 @@
-Ext.define('TP.PanletGridLogs', {
+﻿Ext.define('TP.PanletGridLogs', {
     extend: 'TP.PanletGrid',
 
     title:  'Logfiles',
     height: 200,
     width:  800,
-    maximizable: true,
+    //maximizable: true, // does not work stateful
     initComponent: function() {
         this.callParent();
         this.xdata.url      = 'panorama.cgi?task=show_logs';

@@ -1,5 +1,9 @@
 package Thruk::Controller::shinken_features;
 
+=encoding utf8
+
+=cut
+
 use strict;
 use warnings;
 use utf8;
@@ -189,7 +193,6 @@ sub _process_outagespbimp {
     $c->stash->{title}          = 'Problems and Impacts';
     $c->stash->{infoBoxTitle}   = 'Problems and Impacts';
     $c->stash->{page}           = 'status';
-    $c->stash->{show_top_pane}  = 1;
     $c->stash->{template}       = 'shinken_outagespbimp.tt';
 
     return 1;
@@ -231,8 +234,8 @@ sub _process_bothtypes_page {
     $sortoption = 1 if !defined $sortoptions->{$sortoption};
 
     # get all services
-    my $services = $c->{'db'}->get_services( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'services' ), $servicefilter ], sort => { $order => $sortoptions->{$sortoption}->[0] }, pager => $c );
-    my $hosts    = $c->{'db'}->get_hosts( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'hosts' ), $hostfilter ], sort => { $order => $sortoptions->{$sortoption}->[0] }, pager => $c );
+    my $services = $c->{'db'}->get_services( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'services' ), $servicefilter ], sort => { $order => $sortoptions->{$sortoption}->[0] }, pager => 1 );
+    my $hosts    = $c->{'db'}->get_hosts( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'hosts' ), $hostfilter ], sort => { $order => $sortoptions->{$sortoption}->[0] }, pager => 1 );
     if( $sortoption == 6 and defined $services ) { @{ $c->stash->{'data'} } = reverse @{ $c->stash->{'data'} }; }
 
 

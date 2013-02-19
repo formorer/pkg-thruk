@@ -5,12 +5,23 @@
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 <meta name="generator" content="AsciiDoc 8.5.2" />
 <title>Frequently Asked Questions</title>
-<style type="text/css">
-/* Debug borders */
-p, li, dt, dd, div, pre, h1, h2, h3, h4, h5, h6 {
-/*
-  border: 1px solid red;
-*/
+<style type="text/css">/* Shared CSS for AsciiDoc xhtml11 and html5 backends */
+
+/* Default font. */
+body {
+  font-family: Georgia,serif;
+  background:#F9F9F7 url(data:image/png;base64,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) repeat-x;
+  background-attachment:fixed;
+}
+
+/* Title font. */
+h1, h2, h3, h4, h5, h6,
+div.title, caption.title,
+thead, p.table.header,
+#toctitle,
+#author, #revnumber, #revdate, #revremark,
+#footer, .toctitle {
+  font-family: Arial,Helvetica,sans-serif;
 }
 
 body {
@@ -35,13 +46,8 @@ strong {
   color: #083194;
 }
 
-tt {
-  color: navy;
-}
-
 h1, h2, h3, h4, h5, h6 {
   color: #527bbd;
-  font-family: sans-serif;
   margin-top: 1.2em;
   margin-bottom: 0.5em;
   line-height: 1.3;
@@ -59,9 +65,11 @@ h3 {
 h3 + * {
   clear: left;
 }
+h5 {
+  font-size: 1.0em;
+}
 
 div.sectionbody {
-  font-family: serif;
   margin-left: 0;
 }
 
@@ -76,46 +84,46 @@ p {
 
 ul, ol, li > p {
   margin-top: 0;
+  margin-bottom: 0.2em;
 }
+ul > li     { color: #aaa; }
+ul > li > * { color: black; }
 
 pre {
   padding: 0;
   margin: 0;
 }
 
-span#author {
+#author {
   color: #527bbd;
-  font-family: sans-serif;
   font-weight: bold;
   font-size: 1.1em;
 }
-span#email {
+#email {
 }
-span#revnumber, span#revdate, span#revremark {
-  font-family: sans-serif;
+#revnumber, #revdate, #revremark {
 }
 
-div#footer {
-  font-family: sans-serif;
+#footer {
   font-size: small;
   border-top: 2px solid silver;
   padding-top: 0.5em;
   margin-top: 4.0em;
 }
-div#footer-text {
+#footer-text {
   float: left;
   padding-bottom: 0.5em;
 }
-div#footer-badges {
+#footer-badges {
   float: right;
   padding-bottom: 0.5em;
 }
 
-div#preamble {
+#preamble {
   margin-top: 1.5em;
   margin-bottom: 1.5em;
 }
-div.tableblock, div.imageblock, div.exampleblock, div.verseblock,
+div.imageblock, div.exampleblock, div.verseblock,
 div.quoteblock, div.literalblock, div.listingblock, div.sidebarblock,
 div.admonitionblock {
   margin-top: 1.0em;
@@ -135,7 +143,6 @@ div.content { /* Block element content. */
 /* Block element titles. */
 div.title, caption.title {
   color: #527bbd;
-  font-family: sans-serif;
   font-weight: bold;
   text-align: left;
   margin-top: 1.0em;
@@ -157,13 +164,15 @@ div.content + div.title {
 
 div.sidebarblock > div.content {
   background: #ffffee;
-  border: 1px solid silver;
+  border: 1px solid #dddddd;
+  border-left: 4px solid #f0f0f0;
   padding: 0.5em;
 }
 
 div.listingblock > div.content {
-  border: 1px solid silver;
-  background: #f4f4f4;
+  border: 1px solid #dddddd;
+  border-left: 5px solid #f0f0f0;
+  background: #f8f8f8;
   padding: 0.5em;
 }
 
@@ -171,7 +180,7 @@ div.quoteblock, div.verseblock {
   padding-left: 1.0em;
   margin-left: 1.0em;
   margin-right: 10%;
-  border-left: 5px solid #dddddd;
+  border-left: 5px solid #f0f0f0;
   color: #777777;
 }
 
@@ -180,8 +189,9 @@ div.quoteblock > div.attribution {
   text-align: right;
 }
 
-div.verseblock > div.content {
-  white-space: pre;
+div.verseblock > pre.content {
+  font-family: inherit;
+  font-size: inherit;
 }
 div.verseblock > div.attribution {
   padding-top: 0.75em;
@@ -254,35 +264,12 @@ div.compact div, div.compact div {
   margin-bottom: 0.1em;
 }
 
-div.tableblock > table {
-  border: 3px solid #527bbd;
-}
-thead, p.table.header {
-  font-family: sans-serif;
-  font-weight: bold;
-}
 tfoot {
   font-weight: bold;
 }
 td > div.verse {
   white-space: pre;
 }
-p.table {
-  margin-top: 0;
-}
-/* Because the table frame attribute is overriden by CSS in most browsers. */
-div.tableblock > table[frame="void"] {
-  border-style: none;
-}
-div.tableblock > table[frame="hsides"] {
-  border-left-style: none;
-  border-right-style: none;
-}
-div.tableblock > table[frame="vsides"] {
-  border-top-style: none;
-  border-bottom-style: none;
-}
-
 
 div.hdlist {
   margin-top: 0.8em;
@@ -339,18 +326,25 @@ span.footnote, span.footnoteref {
   min-width: 100px;
 }
 
-
-@media print {
-  div#footer-badges { display: none; }
+div.colist td {
+  padding-right: 0.5em;
+  padding-bottom: 0.3em;
+  vertical-align: top;
+}
+div.colist td img {
+  margin-top: 0.3em;
 }
 
-div#toc {
+@media print {
+  #footer-badges { display: none; }
+}
+
+#toc {
   margin-bottom: 2.5em;
 }
 
-div#toctitle {
+#toctitle, .toctitle {
   color: #527bbd;
-  font-family: sans-serif;
   font-size: 1.1em;
   font-weight: bold;
   margin-top: 1.0em;
@@ -373,189 +367,281 @@ div.toclevel4 {
   margin-left: 6em;
   font-size: 0.9em;
 }
-/* Workarounds for IE6's broken and incomplete CSS2. */
 
-div.sidebar-content {
-  background: #ffffee;
-  border: 1px solid silver;
-  padding: 0.5em;
+span.aqua { color: aqua; }
+span.black { color: black; }
+span.blue { color: blue; }
+span.fuchsia { color: fuchsia; }
+span.gray { color: gray; }
+span.green { color: green; }
+span.lime { color: lime; }
+span.maroon { color: maroon; }
+span.navy { color: navy; }
+span.olive { color: olive; }
+span.purple { color: purple; }
+span.red { color: red; }
+span.silver { color: silver; }
+span.teal { color: teal; }
+span.white { color: white; }
+span.yellow { color: yellow; }
+
+span.aqua-background { background: aqua; }
+span.black-background { background: black; }
+span.blue-background { background: blue; }
+span.fuchsia-background { background: fuchsia; }
+span.gray-background { background: gray; }
+span.green-background { background: green; }
+span.lime-background { background: lime; }
+span.maroon-background { background: maroon; }
+span.navy-background { background: navy; }
+span.olive-background { background: olive; }
+span.purple-background { background: purple; }
+span.red-background { background: red; }
+span.silver-background { background: silver; }
+span.teal-background { background: teal; }
+span.white-background { background: white; }
+span.yellow-background { background: yellow; }
+
+span.big { font-size: 2em; }
+span.small { font-size: 0.6em; }
+
+span.underline { text-decoration: underline; }
+span.overline { text-decoration: overline; }
+span.line-through { text-decoration: line-through; }
+
+
+/*
+ * xhtml11 specific
+ *
+ * */
+
+tt {
+  font-family: monospace;
+  font-size: inherit;
+  color: navy;
 }
-div.sidebar-title, div.image-title {
-  color: #527bbd;
-  font-family: sans-serif;
+
+div.tableblock {
+  margin-top: 1.0em;
+  margin-bottom: 1.5em;
+}
+div.tableblock > table {
+  border: 3px solid #527bbd;
+}
+thead, p.table.header {
   font-weight: bold;
-  margin-top: 0.0em;
-  margin-bottom: 0.5em;
+  color: #527bbd;
+}
+p.table {
+  margin-top: 0;
+}
+/* Because the table frame attribute is overriden by CSS in most browsers. */
+div.tableblock > table[frame="void"] {
+  border-style: none;
+}
+div.tableblock > table[frame="hsides"] {
+  border-left-style: none;
+  border-right-style: none;
+}
+div.tableblock > table[frame="vsides"] {
+  border-top-style: none;
+  border-bottom-style: none;
 }
 
-div.listingblock div.content {
-  border: 1px solid silver;
-  background: #f4f4f4;
-  padding: 0.5em;
+
+/*
+ * html5 specific
+ *
+ * */
+
+.monospaced {
+  font-family: monospace;
+  font-size: inherit;
+  color: navy;
 }
 
-div.quoteblock-attribution {
-  padding-top: 0.5em;
+table.tableblock {
+  margin-top: 1.0em;
+  margin-bottom: 1.5em;
+}
+thead, p.tableblock.header {
+  font-weight: bold;
+  color: #527bbd;
+}
+p.tableblock {
+  margin-top: 0;
+}
+table.tableblock {
+  border-width: 3px;
+  border-spacing: 0px;
+  border-style: solid;
+  border-color: #527bbd;
+  border-collapse: collapse;
+}
+th.tableblock, td.tableblock {
+  border-width: 1px;
+  padding: 4px;
+  border-style: solid;
+  border-color: #527bbd;
+}
+
+table.tableblock.frame-topbot {
+  border-left-style: hidden;
+  border-right-style: hidden;
+}
+table.tableblock.frame-sides {
+  border-top-style: hidden;
+  border-bottom-style: hidden;
+}
+table.tableblock.frame-none {
+  border-style: hidden;
+}
+
+th.tableblock.halign-left, td.tableblock.halign-left {
+  text-align: left;
+}
+th.tableblock.halign-center, td.tableblock.halign-center {
+  text-align: center;
+}
+th.tableblock.halign-right, td.tableblock.halign-right {
   text-align: right;
 }
 
-div.verseblock-content {
-  white-space: pre;
+th.tableblock.valign-top, td.tableblock.valign-top {
+  vertical-align: top;
 }
-div.verseblock-attribution {
-  padding-top: 0.75em;
-  text-align: left;
+th.tableblock.valign-middle, td.tableblock.valign-middle {
+  vertical-align: middle;
 }
-
-div.exampleblock-content {
-  border-left: 3px solid #dddddd;
-  padding-left: 0.5em;
+th.tableblock.valign-bottom, td.tableblock.valign-bottom {
+  vertical-align: bottom;
 }
 
-/* IE6 sets dynamically generated links as visited. */
-div#toc a:visited { color: blue; }
-</style>
-<script type="text/javascript">
-/*<![CDATA[*/
-window.onload = function(){asciidoc.footnotes(); asciidoc.toc(2);}
-var asciidoc = {  // Namespace.
 
-/////////////////////////////////////////////////////////////////////
-// Table Of Contents generator
-/////////////////////////////////////////////////////////////////////
-
-/* Author: Mihai Bazon, September 2002
- * http://students.infoiasi.ro/~mishoo
+/*
+ * manpage specific
  *
- * Table Of Content generator
- * Version: 0.4
+ * */
+
+body.manpage h1 {
+  padding-top: 0.5em;
+  padding-bottom: 0.5em;
+  border-top: 2px solid silver;
+  border-bottom: 2px solid silver;
+}
+body.manpage h2 {
+  border-style: none;
+}
+body.manpage div.sectionbody {
+  margin-left: 3em;
+}
+
+
+/*
+ * Theme specific overrides of the preceding (asciidoc.css) CSS.
  *
- * Feel free to use this script under the terms of the GNU General Public
- * License, as long as you do not remove or alter this notice.
  */
-
- /* modified by Troy D. Hanson, September 2006. License: GPL */
- /* modified by Stuart Rackham, 2006, 2009. License: GPL */
-
-// toclevels = 1..4.
-toc: function (toclevels) {
-
-  function getText(el) {
-    var text = "";
-    for (var i = el.firstChild; i != null; i = i.nextSibling) {
-      if (i.nodeType == 3 /* Node.TEXT_NODE */) // IE doesn't speak constants.
-        text += i.data;
-      else if (i.firstChild != null)
-        text += getText(i);
-    }
-    return text;
-  }
-
-  function TocEntry(el, text, toclevel) {
-    this.element = el;
-    this.text = text;
-    this.toclevel = toclevel;
-  }
-
-  function tocEntries(el, toclevels) {
-    var result = new Array;
-    var re = new RegExp('[hH]([2-'+(toclevels+1)+'])');
-    // Function that scans the DOM tree for header elements (the DOM2
-    // nodeIterator API would be a better technique but not supported by all
-    // browsers).
-    var iterate = function (el) {
-      for (var i = el.firstChild; i != null; i = i.nextSibling) {
-        if (i.nodeType == 1 /* Node.ELEMENT_NODE */) {
-          var mo = re.exec(i.tagName);
-          if (mo && (i.getAttribute("class") || i.getAttribute("className")) != "float") {
-            result[result.length] = new TocEntry(i, getText(i), mo[1]-1);
-          }
-          iterate(i);
-        }
-      }
-    }
-    iterate(el);
-    return result;
-  }
-
-  var toc = document.getElementById("toc");
-  var entries = tocEntries(document.getElementById("content"), toclevels);
-  for (var i = 0; i < entries.length; ++i) {
-    var entry = entries[i];
-    if (entry.element.id == "")
-      entry.element.id = "_toc_" + i;
-    var a = document.createElement("a");
-    a.href = "#" + entry.element.id;
-    a.appendChild(document.createTextNode(entry.text));
-    var div = document.createElement("div");
-    div.appendChild(a);
-    div.className = "toclevel" + entry.toclevel;
-    toc.appendChild(div);
-  }
-  if (entries.length == 0)
-    toc.parentNode.removeChild(toc);
-},
-
-
-/////////////////////////////////////////////////////////////////////
-// Footnotes generator
-/////////////////////////////////////////////////////////////////////
-
-/* Based on footnote generation code from:
- * http://www.brandspankingnew.net/archive/2005/07/format_footnote.html
- */
-
-footnotes: function () {
-  var cont = document.getElementById("content");
-  var noteholder = document.getElementById("footnotes");
-  var spans = cont.getElementsByTagName("span");
-  var refs = {};
-  var n = 0;
-  for (i=0; i<spans.length; i++) {
-    if (spans[i].className == "footnote") {
-      n++;
-      // Use [\s\S] in place of . so multi-line matches work.
-      // Because JavaScript has no s (dotall) regex flag.
-      note = spans[i].innerHTML.match(/\s*\[([\s\S]*)]\s*/)[1];
-      noteholder.innerHTML +=
-        "<div class='footnote' id='_footnote_" + n + "'>" +
-        "<a href='#_footnoteref_" + n + "' title='Return to text'>" +
-        n + "</a>. " + note + "</div>";
-      spans[i].innerHTML =
-        "[<a id='_footnoteref_" + n + "' href='#_footnote_" + n +
-        "' title='View footnote' class='footnote'>" + n + "</a>]";
-      var id =spans[i].getAttribute("id");
-      if (id != null) refs["#"+id] = n;
-    }
-  }
-  if (n == 0)
-    noteholder.parentNode.removeChild(noteholder);
-  else {
-    // Process footnoterefs.
-    for (i=0; i<spans.length; i++) {
-      if (spans[i].className == "footnoteref") {
-        var href = spans[i].getElementsByTagName("a")[0].getAttribute("href");
-        href = href.match(/#.*/)[0];  // Because IE return full URL.
-        n = refs[href];
-        spans[i].innerHTML =
-          "[<a href='#_footnote_" + n +
-          "' title='View footnote' class='footnote'>" + n + "</a>]";
-      }
-    }
-  }
+body {
+  font-family: Garamond, Georgia, serif;
+  font-size: 17px;
+  color: #3E4349;
+  line-height: 1.1em;
 }
-
+h1, h2, h3, h4, h5, h6,
+div.title, caption.title,
+thead, p.table.header,
+#toctitle,
+#author, #revnumber, #revdate, #revremark,
+#footer, .toctitle {
+  font-family: Garmond, Georgia, serif;
+  font-weight: normal;
+  border-bottom-width: 0;
+  color: #3E4349;
 }
-/*]]>*/
-</script>
+div.title, caption.title { color: #596673; font-weight: bold; }
+h1 { font-size: 240%; }
+h2 { font-size: 180%; }
+h3 { font-size: 150%; }
+h4 { font-size: 130%; }
+h5 { font-size: 115%; }
+h6 { font-size: 100%; }
+#header h1 { margin-top: 0; }
+#toc, DIV.subtoc {
+  color: #444444;
+  line-height: 1.3;
+  padding-top: 0.1em;
+}
+#toctitle, .toctitle {
+  font-size: 20px;
+}
+#toc a, DIV.subtoc a {
+    border-bottom: 1px dotted #999999;
+    color: #444444 !important;
+    text-decoration: none !important;
+}
+#toc a:hover, DIV.subtoc a:hover {
+    border-bottom: 1px solid #6D4100;
+    color: #6D4100 !important;
+    text-decoration: none !important;
+}
+div.toclevel1 { margin-top: 0.2em; font-size: 16px; }
+div.toclevel2 { margin-top: 0.15em; font-size: 14px; }
+em, dt, td.hdlist1 { color: black; }
+strong { color: #3E4349; }
+a { color: #004B6B; text-decoration: none; border-bottom: 1px dotted #004B6B; }
+a:visited { color: #615FA0; border-bottom: 1px dotted #615FA0; }
+a:hover { color: #6D4100; border-bottom: 1px solid #6D4100; }
+div.tableblock > table, table.tableblock { border: 3px solid #E8E8E8; }
+th.tableblock, td.tableblock { border: 1px solid #E8E8E8; }
+ul > li > * { color: #3E4349; }
+pre, tt, .monospaced { font-family: Consolas,Menlo,'Deja Vu Sans Mono','Bitstream Vera Sans Mono',monospace; }
+tt, .monospaced { font-size: 0.9em; color: black;
+}
+div.exampleblock > div.content, div.sidebarblock > div.content, div.listingblock > div.content { border-width: 0 0 0 3px; border-color: #E8E8E8; }
+div.verseblock { border-left-width: 0; margin-left: 3em; }
+div.quoteblock { border-left-width: 3px; margin-left: 0; margin-right: 0;}
+div.admonitionblock td.content { border-left: 3px solid #E8E8E8; }
+
+
+DIV.subtoc div.toclevel3 {
+  margin-left: 2em;
+}
+DIV.subtoc div.toclevel4 {
+  margin-left: 4em;
+}
+#footnotes {
+  display: none;
+}</style>
+
 </head>
 <body style="max-width:800">
 <div id="header">
 <h1>Frequently Asked Questions</h1>
-<div id="toc">
-  <div id="toctitle">Table of Contents</div>
-  <noscript><p><b>JavaScript must be enabled in your browser to display the table of contents.</b></p></noscript>
+<div id="toc"><div id="toctitle">Table of Contents</div>
+<div class='toclevel2'><a href='#_general'>General</a></div>
+<div class='toclevel3'><a href='#_is_thruk_an_abbreviation_what_does_thruk_mean'>Is Thruk an Abbreviation? What does Thruk mean?</a></div>
+<div class='toclevel3'><a href='#_where_is_the_statusmap'>Where is the statusmap?</a></div>
+<div class='toclevel3'><a href='#_authorization_authentication_is_not_working'>Authorization/Authentication is not working</a></div>
+<div class='toclevel3'><a href='#_all_dates_and_times_are_displayed_with_the_wrong_timezone'>All dates and times are displayed with the wrong timezone</a></div>
+<div class='toclevel2'><a href='#_usage'>Usage</a></div>
+<div class='toclevel3'><a href='#_how_do_i_select_hosts_services_on_the_status_page'>How do i select hosts/services on the status page?</a></div>
+<div class='toclevel2'><a href='#_where_can_i_see_the_full_command_line_for_a_host_or_servicecheck'>Where can i see the full command line for a host or servicecheck?</a></div>
+<div class='toclevel2'><a href='#_customization'>Customization</a></div>
+<div class='toclevel3'><a href='#_how_to_change_the_side_menu'>How to change the side menu</a></div>
+<div class='toclevel3'><a href='#_how_can_i_integrate_nagvis_maps'>How can i integrate Nagvis Maps</a></div>
+<div class='toclevel3'><a href='#_how_can_i_add_more_themes'>How can i add more themes?</a></div>
+<div class='toclevel3'><a href='#_how_can_i_disable_themes'>How can i disable themes?</a></div>
+<div class='toclevel3'><a href='#_how_can_i_customize_reports'>How can i customize reports?</a></div>
+<div class='toclevel3'><a href='#_why_are_the_pnp_graphs_missing_in_my_reports'>Why are the PNP graphs missing in my reports?</a></div>
+<div class='toclevel2'><a href='#_installation'>Installation</a></div>
+<div class='toclevel3'><a href='#_is_it_possible_to_operate_thruk_in_a_cluster'>Is it possible to operate Thruk in a cluster?</a></div>
+<div class='toclevel3'><a href='#_how_can_i_enable_debug_mode'>How can i enable debug mode?</a></div>
+<div class='toclevel2'><a href='#_errors'>Errors</a></div>
+<div class='toclevel3'><a href='#_backend_not_available'>Backend not available</a></div>
+<div class='toclevel3'><a href='#_undefined_symbol_perl_istack_sp_ptr'>undefined symbol: Perl_Istack_sp_ptr</a></div>
+<div class='toclevel3'><a href='#_broken_pdf_reports_in_centos_rhel_5'>Broken PDF Reports in Centos/Rhel 5</a></div>
 </div>
+
 </div>
 <div id="content">
 <h2 id="_general">General</h2>
@@ -592,12 +678,14 @@ any passwords though the webinterface.</p></div>
 recommended apply changes only to your menu_local.conf in order to
 avoid conflicts on updating Thruk.</p></div>
 <div class="paragraph"><p>Open your menu_local.conf (create one if it does not exists) with your
-preferred text editor and check the config. You can add new sections
-with:</p></div>
+preferred text editor and check the config.</p></div>
+<h4 id="_adding_new_section">Adding new Section</h4>
+<div class="paragraph"><p>You can add new sections with:</p></div>
 <div class="literalblock">
 <div class="content">
 <pre><tt>add_section('name' =&gt; 'General');</tt></pre>
 </div></div>
+<h4 id="_adding_a_new_link">Adding a new Link</h4>
 <div class="paragraph"><p>To add a new link use the following syntax:</p></div>
 <div class="literalblock">
 <div class="content">
@@ -630,6 +718,9 @@ icon: Used for themes which support icons.
 <div class="content">
 <pre><tt>add_link('name' =&gt; 'Nagios, 'href' =&gt; '/nagios', 'target' =&gt; '_new');</tt></pre>
 </div></div>
+<div class="paragraph"><p><em>add_link</em> always adds the new link to the last section. Use <em>insert_item</em> to
+add a link to any section.</p></div>
+<h4 id="_including_original_side_navigation">Including original side navigation</h4>
 <div class="paragraph"><p>You can include the main menu config with the perl do statement.
 Ex.: If you just want to add a new link to your config menu, your
 menu_local.conf could look like this:</p></div>
@@ -641,16 +732,38 @@ add_link('name' =&gt; 'Wato', 'href' =&gt; '/'.$ENV{'OMD_SITE'}.'/check_mk/wato.
 <div class="paragraph"><p>This example just puts the Wato link from check_mks Multisite in your
 config section. Replace the ENV part with a proper path if you do not
 use <a href="http://omdistro.org">OMD</a>.</p></div>
+<h4 id="_inserting_item_in_existing_section">Inserting item in existing Section</h4>
 <div class="paragraph"><p>Adding Items to existing sections can also be achieved by
 <em>insert_item</em>:</p></div>
 <div class="literalblock">
 <div class="content">
-<pre><tt>insert_item('General', { 'href' =&gt; 'http://your-company.com', 'name' =&gt; 'Company' });</tt></pre>
+<pre><tt>do $ENV{'OMD_ROOT'}.'/share/thruk/menu.conf';
+insert_item('General', { 'href' =&gt; 'http://your-company.com', 'name' =&gt; 'Company' });</tt></pre>
 </div></div>
+<h4 id="_removing_item_in_existing_section">Removing item in existing Section</h4>
 <div class="paragraph"><p>Existing Items can be removed with the <em>remove_item</em> function:</p></div>
 <div class="literalblock">
 <div class="content">
-<pre><tt>remove_item('Reports', 'Availability');</tt></pre>
+<pre><tt>do $ENV{'OMD_ROOT'}.'/share/thruk/menu.conf';
+remove_item('Reports', 'Availability');</tt></pre>
+</div></div>
+<h4 id="_make_item_available_for_some_groups_only">Make item available for some groups only</h4>
+<div class="paragraph"><p>Just wrap your changes in a <em>has_group</em>.</p></div>
+<div class="literalblock">
+<div class="content">
+<pre><tt>if(has_group($c, 'Admins')) {
+  add_section('name' =&gt; 'Admins Only');
+  add_link('name' =&gt; 'Admin Link', 'href' =&gt; '.../only_for_admins.html');
+}</tt></pre>
+</div></div>
+<h4 id="_make_item_available_for_some_roles_only">Make item available for some roles only</h4>
+<div class="paragraph"><p>Just wrap your changes in a <em>has_role</em>.</p></div>
+<div class="literalblock">
+<div class="content">
+<pre><tt>if(has_role($c, 'authorized_for_configuration_information')) {
+  add_section('name' =&gt; 'Some Roles Only');
+  add_link('name' =&gt; 'Admin Link', 'href' =&gt; '.../only_for_some_roles.html');
+}</tt></pre>
 </div></div>
 <h3 id="_how_can_i_integrate_nagvis_maps">How can i integrate Nagvis Maps</h3><div style="clear:left"></div>
 <div class="paragraph"><p>Integrating Nagivs is currently only possible when frames are enabled.
@@ -684,12 +797,26 @@ like. See the <a href="http://thruk.org/themes.html">themes page</a> for details
 <div class="paragraph"><p>Themes can be disabled by removing the symlink from your
 <em>themes/themes-enabled</em> directory.
 See the <a href="http://thruk.org/themes.html">themes page</a> for details.</p></div>
+<h3 id="_how_can_i_customize_reports">How can i customize reports?</h3><div style="clear:left"></div>
+<div class="paragraph"><p>Customizing reports is coverd in the <a href="http://thruk.org/documentation.html#_customized_reports">official documenation</a>.</p></div>
+<h3 id="_why_are_the_pnp_graphs_missing_in_my_reports">Why are the PNP graphs missing in my reports?</h3><div style="clear:left"></div>
+<div class="paragraph"><p>First you need a working PNP installation. Then check
+the <a href="http://thruk.org/documentation.html#_pnp_export">official documenation</a>.</p></div>
+<div class="paragraph"><p>If nothing helps, add some debug output to the script which is responsible for
+the pnp export (experienced users only).</p></div>
+<div class="paragraph"><p>Add these lines to <em>plugins/plugins-available/reports2/script/pnp_export.sh</em>.</p></div>
+<div class="listingblock">
+<div class="content">
+<pre><tt>exec &gt;/tmp/pnp.log 2&gt;&amp;1
+set -x</tt></pre>
+</div></div>
+<div class="paragraph"><p>Then regenerate a report and investigate that new logfile.</p></div>
 </div>
 <h2 id="_installation">Installation</h2>
 <div class="sectionbody">
 <h3 id="_is_it_possible_to_operate_thruk_in_a_cluster">Is it possible to operate Thruk in a cluster?</h3><div style="clear:left"></div>
 <div class="paragraph"><p>Yes, just put a load balancer before 2 (or more) Thruk installations
-and make sure the <em>var</em> directory is shared between all instances ( by
+and make sure the <em>var_path</em> directory is shared between all instances ( by
 NFS, DRBD or similar ). There is usually not much traffic in this
 folder.</p></div>
 <h3 id="_how_can_i_enable_debug_mode">How can i enable debug mode?</h3><div style="clear:left"></div>
@@ -743,19 +870,22 @@ for.</p></div>
 <div class="content">
 <pre><tt>/usr/bin/perl: symbol lookup error: /usr/lib/thruk/perl5/x86_64-linux-gnu-thread-multi/auto/List/Util/Util.so: undefined symbol: Perl_Istack_sp_ptr</tt></pre>
 </div></div>
-<div class="paragraph"><p>The solution is simple, use the right package or source installation
-if no package is available for your platform.</p></div>
+<div class="paragraph"><p>The solution is simple: use the right package for your distribution.
+If there is no package is available for your platform, use the source
+installation.</p></div>
 <h3 id="_broken_pdf_reports_in_centos_rhel_5">Broken PDF Reports in Centos/Rhel 5</h3><div style="clear:left"></div>
 <div class="paragraph"><p>PDF reports won&#8217;t work with libcairo &lt; 1.8.8. Therefor you may use the
 prepared packages for cairo 1.8.8 on rhel/centos 5 on the
 <a href="http://thruk.org/download.html">download
 page</a>.</p></div>
+<div class="paragraph"><p>The new <em>reports2</em> module should work fine, even on older Redhat
+boxes.</p></div>
 </div>
 </div>
 <div id="footnotes"><hr /></div>
 <div id="footer">
 <div id="footer-text">
-Last updated 2012-05-06 21:28:09 CEST
+Last updated 2013-02-11 13:13:47 CEST
 </div>
 </div>
 </body>

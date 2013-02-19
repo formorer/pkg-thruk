@@ -14,7 +14,7 @@
   <br><br>
   [% PROCESS _message.tt %]
   <div align="center">
-    <div id="mainlogo"><a href="http://www.thruk.org" target="_blank"><img class="mainlogo" src="[% url_prefix %]thruk/themes/[% theme %]/images/logo_thruk.png" border="0" alt="Thruk" title="Thruk" width="246" height="89"></a></div>
+    <div id="mainlogo"><a href="[% home_link %]" target="_blank"><img class="mainlogo" src="[% url_prefix %]thruk/themes/[% theme %]/images/logo_thruk.png" border="0" alt="Thruk" title="Thruk" width="246" height="89"></a></div>
     <div class="loginmask">
       <form method="POST" action="login.cgi">
           <input type="hidden" name="referer" value="" id="referer">
@@ -49,13 +49,17 @@
   </div>
   <script type="text/javascript">
   <!--
-    if ( top.location.href!= window.location.href ) {
-      var ref = top.location.pathname + top.location.search + top.location.hash;
+    if ( top.location != location ) {
+      var ref = document.location.pathname + document.location.search + document.location.hash;
       top.location.href = '[% loginurl %]?'+ref;
     } else {
       var ref = window.location.search + window.location.hash;
       ref = ref.replace(/^\?expired\&/, '?');
+      ref = ref.replace(/^\?expired$/,  '');
       ref = ref.replace(/^\?invalid\&/, '?');
+      ref = ref.replace(/^\?invalid$/,  '');
+      ref = ref.replace(/^\?problem\&/, '?');
+      ref = ref.replace(/^\?problem$/,  '');
       ref = ref.replace(/^\?/, '/');
       jQuery('#referer').val(ref);
     }

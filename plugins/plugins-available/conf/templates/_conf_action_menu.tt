@@ -1,4 +1,4 @@
-[% IF action != "editor" %]
+﻿[% IF action != "editor" %]
 <table border='0' cellpadding="0" cellspacing="0">
   <tr>
     <td align="center" valign="top" class='confPanel'>
@@ -34,6 +34,17 @@
                 <td><img src='[% url_prefix %]thruk/themes/[% theme %]/images/page_copy.png' border="0" alt='Clone this [% type %]' title='Clone this [% type %]' width="16" height="16"></td>
                 <td class='command'><a href='conf.cgi?sub=objects&amp;action=clone&amp;data.id=[% object.get_id() %]'>Clone this [% type %]</a></td>
               </tr>
+              [% IF object.disabled %]
+              <tr class='data'>
+                <td><img src='[% url_prefix %]thruk/themes/[% theme %]/images/control_play_blue.png' border="0" alt='Enable this [% type %]' title='Enable this [% type %]' width="16" height="16"></td>
+                <td class='command'><a href='conf.cgi?sub=objects&amp;action=enable&amp;data.id=[% object.get_id() %]'>Enable this [% type %]</a></td>
+              </tr>
+              [% ELSE %]
+              <tr class='data'>
+                <td><img src='[% url_prefix %]thruk/themes/[% theme %]/images/control_pause_blue.png' border="0" alt='Disable this [% type %] temporarily' title='Disable this [% type %] temporarily' width="16" height="16"></td>
+                <td class='command'><a href='conf.cgi?sub=objects&amp;action=disable&amp;data.id=[% object.get_id() %]'>Disable this [% type %] temporarily</a></td>
+              </tr>
+              [% END %]
               <tr class='data'>
                 <td><img src='[% url_prefix %]thruk/themes/[% theme %]/images/delete.gif' border="0" alt='Delete this [% type %]' title='Delete this [% type %]' width="20" height="20"></td>
                 <td class='command'><a href='conf.cgi?sub=objects&amp;action=delete&amp;data.id=[% object.get_id() %]'>Delete this [% type %]</a></td>
@@ -49,7 +60,7 @@
               [% IF type == 'contact' %]
               <tr class='data'>
                 <td><img src='[% url_prefix %]thruk/themes/[% theme %]/images/edit.png' border="0" alt='Edit CGI Permissions' title='Edit CGI Permissions' width="16" height="16"></td>
-                <td class='command'><a href='conf.cgi?sub=users&action=change&data.username=[% object.get_name() %]'>Edit CGI Permissions</a></td>
+                <td class='command'><a href='conf.cgi?sub=users&amp;action=change&amp;data.username=[% object.get_name() %]'>Edit CGI Permissions</a></td>
               </tr>
               [% END %]
             [% END %]
@@ -61,6 +72,10 @@
               <tr class='data'>
                 <td><img src='[% url_prefix %]thruk/themes/[% theme %]/images/folder_explore.png' border="0" alt='Browse filesystem' title='Browse filesystem' width="16" height="16"></td>
                 <td class='command'><a href='conf.cgi?sub=objects&amp;action=browser[% IF file_link %]#[% file_link %][% END %]'>Browse filesystem</a></td>
+              </tr>
+              <tr class='data'>
+                <td><img src='[% url_prefix %]thruk/themes/[% theme %]/images/folder_brick.png' border="0" alt='Objects Tree' title='Objects Tree' width="16" height="16"></td>
+                <td class='command'><a href='conf.cgi?sub=objects&amp;action=tree[% IF file_link %]#[% file_link %][% END %]'>Objects Tree</a></td>
               </tr>
             </table>
           </td>

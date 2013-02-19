@@ -1,10 +1,13 @@
 #!/usr/bin/env perl
 
 use strict;
-use Test::More tests => 32;
+use Test::More;
 use Data::Dumper;
 
 BEGIN {
+    plan skip_all => 'internal test only' if defined $ENV{'CATALYST_SERVER'};
+    plan tests => 37;
+
     use lib('t');
     require TestUtils;
     import TestUtils;
@@ -55,29 +58,40 @@ my $sorted_by_abc_exp = [
   {a => 3, b => 'a', c => 10},
 ];
 #########################
+# initialize backend manager
+my $m;
+use_ok 'Thruk::Model::Thruk';
+$m = Thruk::Model::Thruk->new();
+isa_ok($m, 'Thruk::Model::Thruk');
+my $b = $m->{'obj'};
+isa_ok($b, 'Thruk::Backend::Manager');
 
-my $sorted_by_a = Thruk::Backend::Manager::_sort(undef, $befor, { 'ASC' => 'a' });
+my $c = TestUtils::get_c();
+$b->init( 'c' => $c );
+
+
+my $sorted_by_a = $b->_sort($befor, { 'ASC' => 'a' });
 is_deeply($sorted_by_a, $sorted_by_a_exp, 'sort by colum a');
 
-my $sorted_by_b = Thruk::Backend::Manager::_sort(undef, $befor, { 'ASC' => 'b'});
+my $sorted_by_b = $b->_sort($befor, { 'ASC' => 'b'});
 is_deeply($sorted_by_b, $sorted_by_b_exp, 'sort by colum b');
 
-my $sorted_by_c = Thruk::Backend::Manager::_sort(undef, $befor, { 'ASC' => 'c'});
+my $sorted_by_c = $b->_sort($befor, { 'ASC' => 'c'});
 is_deeply($sorted_by_c, $sorted_by_c_exp, 'sort by colum c');
 
-my $sorted_by_ba = Thruk::Backend::Manager::_sort(undef, $befor, { 'ASC' => ['b', 'a'] });
+my $sorted_by_ba = $b->_sort($befor, { 'ASC' => ['b', 'a'] });
 is_deeply($sorted_by_ba, $sorted_by_ba_exp, 'sort by colum b,a');
 
-my $sorted_by_ba_reverse = Thruk::Backend::Manager::_sort(undef, $befor, { 'DESC' => ['b', 'a'] });
+my $sorted_by_ba_reverse = $b->_sort($befor, { 'DESC' => ['b', 'a'] });
 my @sorted_by_ba_exp_reverse = reverse @{$sorted_by_ba_exp};
 is_deeply($sorted_by_ba_reverse, \@sorted_by_ba_exp_reverse, 'sort by colum b,a reverse');
 
-my $sorted_by_abc = Thruk::Backend::Manager::_sort(undef, $befor, { 'ASC' => ['a','b','c'] });
+my $sorted_by_abc = $b->_sort($befor, { 'ASC' => ['a','b','c'] });
 is_deeply($sorted_by_abc, $sorted_by_abc_exp, 'sort by colum a,b,c');
 
 #########################
 SKIP: {
-    skip 'external tests', 15 if defined $ENV{'CATALYST_SERVER'} or Thruk->config->{'no_external_job_forks'};
+    skip 'external tests', 15 if Thruk->config->{'no_external_job_forks'};
 
     my($res, $c) = ctx_request('/thruk/side.html');
     my $contactgroups = $c->{'db'}->get_contactgroups_by_contact($c, 'thrukadmin');
@@ -97,7 +111,7 @@ SKIP: {
     # external cmd
     Thruk::Utils::External::cmd($c, { cmd => "sleep 1; echo 'test'; echo \"err\" >&2;" });
     my $id = $c->stash->{'job_id'};
-    isnt($id, undef, "got an id");
+    isnt($id, undef, "got an id: ".$id);
 
     # wait for completion
     for(1..5) {
@@ -105,7 +119,7 @@ SKIP: {
         sleep(1);
     }
 
-    is(Thruk::Utils::External::is_running($c, $id), 0, "job finished");
+    is(Thruk::Utils::External::is_running($c, $id), 0, "job finished") or BAIL_OUT("job did not finish");
     my($out, $err, $time, $dir) = Thruk::Utils::External::get_result($c, $id);
 
     is($out,  "test\n", "got result");
@@ -134,6 +148,7 @@ SKIP: {
     isnt($dir,   undef,   "got dir");
 };
 
+#########################
 
 is(Thruk::Utils::version_compare('1.0',         '1.0'),     1, 'version_compare: 1.0 vs. 1.0');
 is(Thruk::Utils::version_compare('1.0.0',       '1.0'),     1, 'version_compare: 1.0.0 vs. 1.0');
@@ -143,3 +158,11 @@ is(Thruk::Utils::version_compare('1.0.1',       '1.0.0'),   1, 'version_compare:
 is(Thruk::Utils::version_compare('1.0.0',       '1.0.1b1'), 0, 'version_compare: 1.0.0 vs. 1.0.1b1');
 is(Thruk::Utils::version_compare('1.0.1b1',     '1.0.1b2'), 0, 'version_compare: 1.0.1b1 vs. 1.0.1b2');
 is(Thruk::Utils::version_compare('2.0-shinken', '1.1.3'),   1, 'version_compare: 2.0-shinken vs. 1.1.3');
+
+#########################
+my $str      = '$USER1$/test -a $ARG1$ -b $ARG2$ -c $HOSTNAME$';
+my $macros   = {'$USER1$' => '/opt', '$ARG1$' => 'a', '$HOSTNAME$' => 'host' };
+my($replaced,$rc) = $b->_get_replaced_string($str, $macros);
+my $expected = '/opt/test -a a -b  -c host';
+is($rc, 1, 'macro replacement with empty args succeeds');
+is($replaced, $expected, 'macro replacement with empty args string');

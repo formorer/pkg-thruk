@@ -20,7 +20,7 @@ Generic Access to Thruks Config
 
 ######################################
 
-our $VERSION = '1.52';
+our $VERSION = '1.64';
 
 my $project_root = Catalyst::Utils::home('Thruk::Config');
 my $branch       = '';
@@ -29,18 +29,19 @@ $branch          = $gitbranch unless $branch ne '';
 
 our %config = ('name'                   => 'Thruk',
               'version'                => $VERSION,
-              'released'               => 'September 29, 2012',
+              'branch'                 => $branch,
+              'released'               => 'February 15, 2013',
               'compression_format'     => 'gzip',
               'ENCODING'               => 'utf-8',
               'image_path'             => $project_root.'/root/thruk/images',
               'project_root'           => $project_root,
               'home'                   => $project_root,
-              'min_livestatus_version' => '1.1.3',
               'default_view'           => 'TT',
               'View::TT'               => {
                   TEMPLATE_EXTENSION => '.tt',
                   ENCODING           => 'utf8',
                   INCLUDE_PATH       => $project_root.'/templates',
+                  RECURSION          => 1,
                   FILTERS            => {
                                           'duration'            => \&Thruk::Utils::Filter::duration,
                                           'nl2br'               => \&Thruk::Utils::Filter::nl2br,
@@ -70,9 +71,14 @@ our %config = ('name'                   => 'Thruk',
                                           'nl2br'               => \&Thruk::Utils::Filter::nl2br,
                                           'action_icon'         => \&Thruk::Utils::Filter::action_icon,
                                           'logline_icon'        => \&Thruk::Utils::Filter::logline_icon,
+                                          'json_encode'         => \&Thruk::Utils::Filter::json_encode,
+                                          'encode_json_obj'     => \&Thruk::Utils::Filter::encode_json_obj,
+                                          'uniqnumber'          => \&Thruk::Utils::Filter::uniqnumber,
                                           'calculate_first_notification_delay_remaining' => \&Thruk::Utils::Filter::calculate_first_notification_delay_remaining,
                                           'set_favicon_counter' => \&Thruk::Utils::Status::set_favicon_counter,
                                           'get_pnp_url'         => \&Thruk::Utils::get_pnp_url,
+                                          'make_test_mode'      => (defined $ENV{'THRUK_SRC'} and $ENV{'THRUK_SRC'} eq 'TEST') ? 1 : 0,
+                                          'button'              => \&Thruk::Utils::Filter::button,
 
                                           'version'        => $VERSION,
                                           'branch'         => $branch,
@@ -80,11 +86,13 @@ our %config = ('name'                   => 'Thruk',
                                           'debug_details'  => Thruk::Utils::get_debug_details(),
                                           'stacktrace'     => '',
                                           'backends'       => [],
+                                          'backend_detail' => {},
                                           'pi_detail'      => {},
                                           'param_backend'  => '',
                                           'refresh_rate'   => '',
                                           'page'           => '',
                                           'title'          => '',
+                                          'extrabodyclass' => '',
                                           'remote_user'    => '?',
                                           'infoBoxTitle'   => '',
                                           'has_proc_info'  => 0,
@@ -103,6 +111,7 @@ our %config = ('name'                   => 'Thruk',
                                           'sortprefix'     => '',       # used in _status_detail_table.tt / _status_hostdetail_table.tt
                                           'show_form'      => '1',      # used in _status_filter.tt
                                           'show_top_pane'  => 0,        # used in _header.tt on status pages
+                                          'body_class'     => '',       # used in _conf_bare.tt on config pages
                                           'thruk_debug'    => 0,
                                           'all_in_one_css' => 0,
                                           'hide_backends_chooser' => 0,
@@ -112,6 +121,7 @@ our %config = ('name'                   => 'Thruk',
                                           'menu_states'      => {},
                                           'menu_states_json' => "{}",
                                           'cookie_auth'      => 0,
+                                          'space'          => ' ',
                                           'uri_filter'     => {
                                                 'bookmark'      => undef,
                                                 'referer'       => undef,
@@ -142,7 +152,7 @@ our %config = ('name'                   => 'Thruk',
                   POST_CHOMP         => 1,
                   TRIM               => 1,
                   COMPILE_EXT        => '.ttc',
-                  STAT_TTL           => 3600,
+                  STAT_TTL           => 604800, # template do not change in production
                   STRICT             => 0,
                   render_die         => 1,
               },
@@ -188,6 +198,9 @@ our %config = ('name'                   => 'Thruk',
                     'class'            => "Catalyst::Plugin::Cache::Backend::Memory",
                   },
               },
+              'Plugin::ConfigLoader'  => {
+                driver => { General => { '-CComments' => 0  } }
+              }
 );
 # set TT strict mode only for authors
 $config{'thruk_debug'} = 0;
@@ -217,23 +230,17 @@ make config available without loading complete catalyst
 =cut
 
 sub get_config {
-    my @files;
-    for my $path ('.', $ENV{'CATALYST_CONFIG'}, $ENV{'THRUK_CONFIG'}) {
-        next unless defined $path;
-        push @files, $path.'/thruk.conf'       if -f $path.'/thruk.conf';
-        push @files, $path.'/thruk_local.conf' if -f $path.'/thruk_local.conf';
-    }
-    my $cfg   = Config::Any->load_files({
-            files       => \@files,
-            filter      => \&Catalyst::Plugin::ConfigLoader::_fix_syntax,
-            use_ext     => 1
+    my @files = @_;
+    if(scalar @files == 0) {
+        for my $path ('.', $ENV{'CATALYST_CONFIG'}, $ENV{'THRUK_CONFIG'}) {
+            next unless defined $path;
+            push @files, $path.'/thruk.conf'       if -f $path.'/thruk.conf';
+            push @files, $path.'/thruk_local.conf' if -f $path.'/thruk_local.conf';
         }
-    );
+    }
 
-    # map the array of hashrefs to a simple hash
-    my %configs = map { %$_ } @$cfg;
-
-    my %config = %Thruk::Config::config;
+    my %configs = %{_load_any(\@files)};
+    my %config  = %Thruk::Config::config;
     for my $file (@files) {
         for my $key (keys %{$configs{$file}}) {
             if(defined $config{$key} and ref $config{$key} eq 'HASH') {
@@ -263,7 +270,12 @@ sub set_default_config {
     $config->{'url_prefix'} = exists $config->{'url_prefix'} ? $config->{'url_prefix'} : '/';
     my $defaults = {
         'cgi.cfg'                       => 'cgi.cfg',
+        bug_email_rcpt                  => 'bugs@thruk.org',
+        home_link                       => 'http://www.thruk.org',
+        mode_file                       => '0660',
+        mode_dir                        => '0770',
         backend_debug                   => 0,
+        connection_pool_size            => 0,
         use_ajax_search                 => 1,
         ajax_search_hosts               => 1,
         ajax_search_hostgroups          => 1,
@@ -306,12 +318,11 @@ sub set_default_config {
         use_new_search                  => 1,
         use_new_command_box             => 1,
         all_problems_link               => $config->{'url_prefix'}."thruk/cgi-bin/status.cgi?style=combined&amp;hst_s0_hoststatustypes=4&amp;hst_s0_servicestatustypes=31&amp;hst_s0_hostprops=10&amp;hst_s0_serviceprops=0&amp;svc_s0_hoststatustypes=3&amp;svc_s0_servicestatustypes=28&amp;svc_s0_hostprops=10&amp;svc_s0_serviceprops=10&amp;svc_s0_hostprop=2&amp;svc_s0_hostprop=8&amp;title=All+Unhandled+Problems",
-        statusmap_default_groupby       => 'address',
-        statusmap_default_type          => 'table',
         show_long_plugin_output         => 'popup',
         info_popup_event_type           => 'onclick',
         info_popup_options              => 'STICKY,CLOSECLICK,HAUTO,MOUSEOFF',
         cmd_quick_status                => {
+                    default                => 'reschedule next check',
                     reschedule             => 1,
                     downtime               => 1,
                     comment                => 1,
@@ -353,7 +364,7 @@ sub set_default_config {
         thruk_bin                           => '/usr/bin/thruk',
         thruk_init                          => '/etc/init.d/thruk',
         thruk_shell                         => '/bin/bash -l -c',
-        report_nice_level                   => 5,
+        first_day_of_week                   => 0,
         weekdays                        => {
                     '0'                     => 'Sunday',
                     '1'                     => 'Monday',
@@ -372,6 +383,9 @@ sub set_default_config {
         'cookie_auth_session_timeout'       => 86400,
         'cookie_auth_session_cache_timeout' => 5,
         'perf_bar_mode'                     => 'match',
+        'sitepanel'                         => 'auto',
+        'ssl_verify_hostnames'              => 1,
+        'use_curl'                          => 0,
     };
     $defaults->{'thruk_bin'} = 'script/thruk' if -f 'script/thruk';
     for my $key (keys %{$defaults}) {
@@ -392,8 +406,12 @@ sub set_default_config {
         $config->{'command_disabled'} = Thruk::Utils::array2hash(Thruk::Utils::expand_numeric_list($config->{'command_disabled'}));
     }
 
+    $ENV{'THRUK_SRC'} = 'SCRIPTS' unless defined $ENV{'THRUK_SRC'};
     # external jobs can be disabled by env
-    if(defined $ENV{'NO_EXTERNAL_JOBS'}) {
+    if(defined $ENV{'NO_EXTERNAL_JOBS'}
+       or $ENV{'THRUK_SRC'} eq 'SCRIPTS'
+       or $ENV{'THRUK_SRC'} eq 'CLI')
+    {
         $config->{'no_external_job_forks'} = 1;
     }
 
@@ -407,10 +425,31 @@ sub set_default_config {
 
     # additional user template paths?
     if(defined $config->{'user_template_path'}) {
-        unshift @{$config->{templates_paths}}, $config->{'user_template_path'};
+        if(scalar @{$config->{templates_paths}} == 0 || $config->{templates_paths}->[0] ne $config->{'user_template_path'}) {
+            unshift @{$config->{templates_paths}}, $config->{'user_template_path'};
+        }
     }
 
+    $ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = $config->{'ssl_verify_hostnames'};
+
     return;
+}
+
+######################################
+sub _load_any {
+    my ($files) = @_;
+    my $cfg   = Config::Any->load_files({
+            files       => $files,
+            filter      => \&Catalyst::Plugin::ConfigLoader::_fix_syntax,
+            use_ext     => 1,
+            driver_args => $Thruk::Config::config{'Plugin::ConfigLoader'}->{'driver'},
+        }
+    );
+
+    # map the array of hashrefs to a simple hash
+    my %configs = map { %$_ } @$cfg;
+
+    return \%configs;
 }
 
 ######################################

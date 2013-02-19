@@ -246,13 +246,11 @@ sub _display_alert_totals {
     elsif($displaytype == REPORT_HOSTGROUP_ALERT_TOTALS) {
         $c->stash->{'box_title'} = 'Totals By Hostgroup';
         my $tmp = $c->{'db'}->get_hostgroups();
-        Thruk::Utils::array2hash($tmp, 'name');
         $box_title_data = Thruk::Utils::array2hash($tmp, 'name');
     }
     elsif($displaytype == REPORT_HOST_ALERT_TOTALS) {
         $c->stash->{'box_title'} = 'Totals By Host';
         my $tmp = $c->{'db'}->get_hosts(columns => [qw/name alias/]);
-        Thruk::Utils::array2hash($tmp, 'name');
         $box_title_data = Thruk::Utils::array2hash($tmp, 'name');
     }
     elsif($displaytype == REPORT_SERVICE_ALERT_TOTALS) {
@@ -261,7 +259,6 @@ sub _display_alert_totals {
     elsif($displaytype == REPORT_SERVICEGROUP_ALERT_TOTALS) {
         $c->stash->{'box_title'} = 'Totals By Servicegroup';
         my $tmp = $c->{'db'}->get_servicegroups();
-        Thruk::Utils::array2hash($tmp, 'name');
         $box_title_data = Thruk::Utils::array2hash($tmp, 'name');
     }
 
@@ -374,7 +371,7 @@ sub _get_alerts_from_log {
     my($hostlogs, $servicelogs);
 
     $c->stats->profile(begin => "summary::updatecache");
-    $c->{'db'}->renew_logcache($c);
+    return if $c->{'db'}->renew_logcache($c);
     $c->stats->profile(end   => "summary::updatecache");
 
     if($c->stash->{alerttypefilter} ne "Service") {
@@ -452,11 +449,11 @@ sub _get_filter {
         push @hostfilter,    { current_host_groups => { '>=' => $hostgroup }};
         push @servicefilter, { current_host_groups => { '>=' => $hostgroup }};
     }
-    elsif(defined $host and $host ne 'all') {
+    if(defined $host and $host ne 'all') {
         push @hostfilter,    { host_name => $host };
         push @servicefilter, { host_name => $host };
     }
-    elsif(defined $servicegroup and $servicegroup ne 'all') {
+    if(defined $servicegroup and $servicegroup ne 'all') {
         push @hostfilter,    { current_service_groups => { '>=' => $servicegroup }};
         push @servicefilter, { current_service_groups => { '>=' => $servicegroup }};
     }

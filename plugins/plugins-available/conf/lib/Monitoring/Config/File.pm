@@ -8,6 +8,7 @@ use Monitoring::Config::Object;
 use File::Slurp;
 use utf8;
 use Encode qw(encode_utf8 decode);
+use Thruk::Utils::Conf;
 use Thruk::Utils::IO;
 
 =head1 NAME
@@ -30,9 +31,12 @@ return new host
 
 =cut
 sub new {
-    my ( $class, $file, $readonlypattern, $coretype ) = @_;
+    my ( $class, $file, $readonlypattern, $coretype, $force, $remotepath ) = @_;
+    Thruk::Utils::Conf::decode_any($file);
+    Thruk::Utils::Conf::decode_any($remotepath);
     my $self = {
         'path'         => $file,
+        'display'      => $remotepath || $file,
         'mtime'        => undef,
         'md5'          => undef,
         'inode'        => 0,
@@ -53,19 +57,23 @@ sub new {
     confess('no core type!') unless defined $coretype;
 
     # dont save relative paths
-    if($file =~ m/\.\./mx or $file !~ m/\.cfg$/mx) {
+    if(!$force && $file =~ m/\.\./mx) {
+        warn("won't open relative path: $file");
         return;
     }
 
-    # readonly file?
-    if(defined $readonlypattern) {
-        for my $p ( ref $readonlypattern eq 'ARRAY' ? @{$readonlypattern} : ($readonlypattern) ) {
-            if($file =~ m|$p|mx) {
-                $self->{'readonly'} = 1;
-                last;
-            }
-        }
+    # config files must end on .cfg
+    if(!$force && $file !~ m/\.cfg$/mx) {
+        warn("unknown suffix for file $file. Should be '.cfg'.");
+        return;
     }
+
+    # no double slashes in paths
+    $self->{'path'}    =~ s|/+|/|gmx;
+    $self->{'display'} =~ s|/+|/|gmx;
+
+    # readonly file?
+    $self->update_readonly_status($readonlypattern);
 
     # new file?
     unless(-f $self->{'path'}) {
@@ -97,26 +105,30 @@ sub update_objects {
 
     my $current_object;
     my $in_unknown_object;
+    my $in_disabled_object;
     my $comments            = [];
+    my $inl_comments        = {};
     $self->{'objects'}      = [];
     $self->{'errors'}       = [];
     $self->{'parse_errors'} = [];
+    $self->{'comments'}     = [];
 
     open(my $fh, '<', $self->{'path'}) or die("cannot open file ".$self->{'path'}.": ".$!);
     while(my $line = <$fh>) {
-        eval { $line = decode( "utf8", $line, Encode::FB_CROAK ) };
-        if ( $@ ) { # input was not utf8
-            $line = decode( "iso-8859-1", $line, Encode::FB_WARN );
-        }
+        Thruk::Utils::Conf::decode_any($line);
         chomp($line);
-        while(substr($line, -1) eq '\\' and substr($line, 0, 1) ne '#') {
+        # connect multiple lines
+        while(substr($line, -1) eq '\\' and (substr($line, 0, 1) ne '#' or $in_disabled_object)) {
             my $newline = <$fh>;
             chomp($newline);
             StripLSpace($newline);
+            if($in_disabled_object) {
+                $newline = substr($newline, 1);
+            }
             $line = substr($line, 0, -1).$newline;
         }
-        ($current_object, $in_unknown_object, $comments)
-            = $self->_parse_line($line, $current_object, $in_unknown_object, $comments);
+        ($current_object, $in_unknown_object, $comments, $inl_comments, $in_disabled_object)
+            = $self->_parse_line($line, $current_object, $in_unknown_object, $comments, $inl_comments, $in_disabled_object);
     }
 
     if(defined $current_object or $in_unknown_object) {
@@ -124,8 +136,13 @@ sub update_objects {
     }
 
     # add trailing comments to last object
-    if(defined $comments and scalar @{$comments} > 0 and scalar @{$self->{'objects'}} > 0) {
-        push @{$self->{'objects'}->[scalar @{$self->{'objects'}}-1]->{'comments'}}, @{$comments};
+    if(defined $comments and scalar @{$comments} > 0) {
+        # only if we have at least one object
+        if(scalar @{$self->{'objects'}} > 0) {
+            push @{$self->{'objects'}->[scalar @{$self->{'objects'}}-1]->{'comments'}}, @{$comments};
+        } else {
+            $self->{'comments'} = $comments;
+        }
     }
 
     Thruk::Utils::IO::close($fh, $self->{'path'}, 1);
@@ -152,15 +169,18 @@ sub update_objects_from_text {
     my $current_object;
     my $object_at_line;
     my $in_unknown_object;
+    my $in_disabled_object;
     my $comments            = [];
+    my $inl_comments        = {};
     $self->{'objects'}      = [];
     $self->{'errors'}       = [];
     $self->{'parse_errors'} = [];
+    $self->{'comments'}     = [];
 
     my $linenr = 1;
     my $buffer = '';
     for my $line (split/\n/mx, $text) {
-        chomp($line);
+        StripTSpace($line);
         if(substr($line, -1) eq '\\' and substr($line, 0, 1) ne '#') {
             StripLSpace($line);
             $line    = substr($line, 0, -1);
@@ -173,8 +193,8 @@ sub update_objects_from_text {
             $line   = $buffer.$line;
             $buffer = '';
         }
-        ($current_object, $in_unknown_object, $comments)
-            = $self->_parse_line($line, $current_object, $in_unknown_object, $comments, $linenr);
+        ($current_object, $in_unknown_object, $comments, $inl_comments, $in_disabled_object)
+            = $self->_parse_line($line, $current_object, $in_unknown_object, $comments, $inl_comments, $in_disabled_object, $linenr);
         if(defined $lastline and $lastline ne '' and !defined $object_at_line) {
             if($linenr >= $lastline) {
                 $object_at_line = $current_object;
@@ -189,7 +209,12 @@ sub update_objects_from_text {
 
     # add trailing comments to last object
     if(defined $comments and scalar @{$comments} > 0) {
-        push @{$self->{'objects'}->[scalar @{$self->{'objects'}}-1]->{'comments'}}, @{$comments};
+        # only if we have at least one object
+        if(scalar @{$self->{'objects'}} > 0) {
+            push @{$self->{'objects'}->[scalar @{$self->{'objects'}}-1]->{'comments'}}, @{$comments};
+        } else {
+            $self->{'comments'} = $comments;
+        }
     }
 
     $self->{'parsed'}  = 1;
@@ -197,6 +222,38 @@ sub update_objects_from_text {
 
     return $object_at_line if defined $lastline;
     return;
+}
+
+##########################################################
+
+=head2 readonly
+
+return true if file is readonly
+
+=cut
+sub readonly {
+    my($self) = @_;
+    return $self->{'readonly'};
+}
+
+##########################################################
+
+=head2 update_readonly_status
+
+updates the readonly status for this file
+
+=cut
+sub update_readonly_status {
+    my($self, $readonlypattern) = @_;
+    if(defined $readonlypattern) {
+        for my $p ( ref $readonlypattern eq 'ARRAY' ? @{$readonlypattern} : ($readonlypattern) ) {
+            if($self->{'path'} =~ m|$p|mx) {
+                $self->{'readonly'} = 1;
+                last;
+            }
+        }
+    }
+    return $self->{'readonly'};
 }
 
 
@@ -208,57 +265,67 @@ parse a single config line
 
 =cut
 sub _parse_line {
-    my ( $self, $line, $current_object, $in_unknown_object, $comments, $linenr ) = @_;
+    my ( $self, $line, $current_object, $in_unknown_object, $comments, $inl_comments, $in_disabled_object, $linenr) = @_;
 
     chomp($line);
 
     # strip whitespaces
     StripLTSpace($line);
 
+    # skip empty lines;
+    return($current_object, $in_unknown_object, $comments, $inl_comments, $in_disabled_object) if $line eq '';
+
     # full line comments
-    if(substr($line, 0, 1) eq '#' or substr($line, 0, 1) eq ';') {
+    if(!$in_disabled_object
+       and (   substr($line, 0, 1) eq '#'
+            or substr($line, 0, 1) eq ';')
+       and $line !~ m/^(;|\#)\s*define\s+/mxo
+    ) {
+        $line =~ s/^(;|\#)\s+//mx;
         push @{$comments}, $line;
-        return($current_object, $in_unknown_object, $comments);
+        return($current_object, $in_unknown_object, $comments, $inl_comments, $in_disabled_object);
     }
 
-    # skip empty lines;
-    return($current_object, $in_unknown_object, $comments) if $line eq '';
-
     # inline comments only with ; not with #
-    if($line =~ s/^(.*?)\s*([\;].*)$//gmxo) {
-        # remove inline comments
-        #push @{$comments}, $2;
+    if($line =~ s/^(.+?)\s*([\;].*)$//gmxo) {
         $line = $1;
+        # save inline comments if possible
+        my($key, $value) = split(/\s+/mxo, $line, 2);
+        $inl_comments->{$key} = $2 if defined $key;
     }
 
     $linenr = $. unless defined $linenr;
-    $self->{'lines'} = $linenr;
+    $self->{'lines'} = $linenr; # increase line counter
 
     # new object starts
-    if(substr($line, 0, 7) eq 'define ' and $line =~ m/^define\s+(\w+)(\s|{|$)/gmxo) {
-        $current_object = Monitoring::Config::Object->new(type => $1, file => $self, line => $linenr, 'coretype' => $self->{'coretype'});
+    if($line =~ m/^(;|\#|)\s*define\s+(\w+)(\s|{|$)/mxo) {
+        $in_disabled_object = $1 ? 1 : 0;
+        $current_object = Monitoring::Config::Object->new(type => $2, file => $self, line => $linenr, 'coretype' => $self->{'coretype'}, disabled => $in_disabled_object);
         unless(defined $current_object) {
-            push @{$self->{'parse_errors'}}, "unknown object type '".$1."' in ".Thruk::Utils::Conf::_link_obj($self->{'path'}, $linenr);
-            $in_unknown_object = 1;
-            return($current_object, $in_unknown_object, $comments);
+            push @{$self->{'parse_errors'}}, "unknown object type '".$2."' in ".Thruk::Utils::Conf::_link_obj($self->{'path'}, $linenr);
+            $in_unknown_object  = 1;
+            return($current_object, $in_unknown_object, $comments, $inl_comments, $in_disabled_object);
         }
     }
 
     # old object finished
-    elsif($line eq '}') {
+    elsif($line eq '}' or ($in_disabled_object and $line =~ m/^(;|\#)\s*}$/mxo)) {
         unless(defined $current_object) {
             push @{$self->{'parse_errors'}}, "unexpected end of object in ".Thruk::Utils::Conf::_link_obj($self->{'path'}, $linenr);
-            return($current_object, $in_unknown_object, $comments);
+            return($current_object, $in_unknown_object, $comments, $inl_comments, $in_disabled_object);
         }
-        $current_object->{'comments'} = $comments;
+        $current_object->{'comments'}     = $comments;
+        $current_object->{'inl_comments'} = $inl_comments;
         $current_object->{'line2'}    = $linenr;
         my $parse_errors = $current_object->parse();
         if(scalar @{$parse_errors} > 0) { push @{$self->{'parse_errors'}}, @{$parse_errors} }
         $current_object->{'id'} = $current_object->_make_id();
         push @{$self->{'objects'}}, $current_object;
         undef $current_object;
-        $comments = [];
-        $in_unknown_object = 0;
+        $comments     = [];
+        $inl_comments = {};
+        $in_unknown_object  = 0;
+        $in_disabled_object = 0;
     }
 
     elsif($in_unknown_object) {
@@ -267,7 +334,9 @@ sub _parse_line {
 
     # in an object definition
     elsif(defined $current_object) {
+        if($in_disabled_object) { $line =~ s/^(\#|;)\s*//mxo; }
         my($key, $value) = split(/\s+/mxo, $line, 2);
+        return($current_object, $in_unknown_object, $comments, $inl_comments, $in_disabled_object) if($in_disabled_object and !defined $key);
         # different parsing for timeperiods
         if($current_object->{'type'} eq 'timeperiod'
            and $key ne 'use'
@@ -278,21 +347,24 @@ sub _parse_line {
            and $key ne 'exclude'
         ) {
             my($timedef, $timeranges);
-            if($line =~ /^(.*?)\s+(\d{1,2}:\d{1,2}\-\d{1,2}:\d{1,2}[\d,:\-\s]*)/gmxo) {
+            if($line =~ m/^(.*?)\s+(\d{1,2}:\d{1,2}\-\d{1,2}:\d{1,2}[\d,:\-\s]*)/mxo) {
                 $timedef    = $1;
                 $timeranges = $2;
             }
             if(defined $timedef) {
-                if(defined $current_object->{'conf'}->{$timedef}) {
+                if(defined $current_object->{'conf'}->{$timedef} and $current_object->{'conf'}->{$timedef} ne $timeranges) {
                     push @{$self->{'parse_errors'}}, "duplicate attribute $timedef in '".$line."' in ".Thruk::Utils::Conf::_link_obj($self->{'path'}, $linenr);
                 }
                 $current_object->{'conf'}->{$timedef} = $timeranges;
+                if(defined $inl_comments->{$key} and $key ne $timedef) {
+                    $inl_comments->{$timedef} = delete $inl_comments->{$key};
+                }
             } else {
                 push @{$self->{'parse_errors'}}, "unknown time definition '".$line."' in ".Thruk::Utils::Conf::_link_obj($self->{'path'}, $linenr);
             }
         }
         else {
-            if(defined $current_object->{'conf'}->{$key}) {
+            if(defined $current_object->{'conf'}->{$key} and $current_object->{'conf'}->{$key} ne $value) {
                 push @{$self->{'parse_errors'}}, "duplicate attribute $key in '".$line."' in ".Thruk::Utils::Conf::_link_obj($self->{'path'}, $linenr);
             }
             $current_object->{'conf'}->{$key} = $value;
@@ -307,7 +379,7 @@ sub _parse_line {
         push @{$self->{'parse_errors'}}, "syntax invalid: '".$line."' in ".Thruk::Utils::Conf::_link_obj($self->{'path'}, $linenr);
     }
 
-    return($current_object, $in_unknown_object, $comments);
+    return($current_object, $in_unknown_object, $comments, $inl_comments, $in_disabled_object);
 }
 
 ##########################################################
@@ -389,7 +461,7 @@ sub save {
         return;
     }
 
-    my $content = $self->_get_new_file_content();
+    my $content = $self->get_new_file_content();
     open(my $fh, '>', $self->{'path'}) or do {
         push @{$self->{'errors'}}, "cannot write to ".$self->{'path'}.": ".$!;
         return;
@@ -416,13 +488,23 @@ sub diff {
     my ( $self ) = @_;
 
     my ($fh, $filename) = tempfile();
-    my $content         = $self->_get_new_file_content();
+    my $content         = $self->get_new_file_content();
     print $fh $content;
     Thruk::Utils::IO::close($fh, $filename);
 
-    my $diff = `diff -wuN "$self->{'path'}" "$filename" 2>&1`;
-
+    my $diff = "";
+    my $cmd = 'diff -wuN "'.$self->{'path'}.'" "'.$filename.'" 2>&1';
+    open(my $ph, '-|', $cmd);
+    while(<$ph>) {
+        my $line = $_;
+        Thruk::Utils::Conf::decode_any($line);
+        $diff .= $line;
+    }
     unlink($filename);
+
+    # nice file path
+    $diff =~ s/\Q$self->{'path'}\E/$self->{'display'}/mx;
+
     return $diff;
 }
 
@@ -439,20 +521,26 @@ sub _update_meta_data {
 
 ##########################################################
 
-=head2 _get_new_file_content
+=head2 get_new_file_content
 
 returns the current raw file content
 
 =cut
-sub _get_new_file_content {
-    my $self        = shift;
-    my $new_content = "";
+sub get_new_file_content {
+    my($self)       = @_;
+    my $new_content = '';
 
     return $new_content if $self->{'deleted'};
 
-    return read_file($self->{'path'}) unless $self->{'changed'};
+    return encode_utf8(read_file($self->{'path'})) unless $self->{'changed'};
 
-    my $linenr = 0;
+    my $linenr = 1;
+
+    # file with comments only
+    if($self->{'comments'}) {
+        $new_content  = Monitoring::Config::Object::format_comments($self->{'comments'});
+        $linenr      += scalar @{$self->{'comments'}};
+    }
 
     # sort by line number, but put line 0 at the end
     for my $obj (sort { $b->{'line'} > 0 <=> $a->{'line'} > 0 || $a->{'line'} <=> $b->{'line'} } @{$self->{'objects'}}) {

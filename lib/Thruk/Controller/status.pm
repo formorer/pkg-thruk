@@ -74,6 +74,7 @@ sub index : Path : Args(0) : MyAction('AddDefaults') {
     $c->stash->{page}          = 'status';
     $c->stash->{show_top_pane} = 1;
     $c->stash->{style}         = $style;
+    $c->stash->{'num_hosts'}   = 0;
 
     $c->stash->{substyle}     = undef;
     if($c->stash->{'hostgroup'}) {
@@ -158,8 +159,12 @@ sub _process_raw_request {
             elsif($type eq 'service' or $type eq 'services') {
                 my $host = $c->{'request'}->{'parameters'}->{'host'};
                 my $additional_filter;
+                my @hostfilter;
                 if(defined $host and $host ne '') {
-                    $additional_filter = { 'host_name' => $host };
+                    for my $h (split(/\s*,\s*/mx, $host)) {
+                        push @hostfilter, { 'host_name' => $h };
+                    }
+                    $additional_filter = Thruk::Utils::combine_filter('-or', \@hostfilter);
                 }
                 $data = $c->{'db'}->get_service_names( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'services' ), $additional_filter ] );
             }
@@ -278,6 +283,8 @@ sub _process_search_request {
 sub _process_details_page {
     my( $self, $c ) = @_;
 
+    my $view_mode = $c->{'request'}->{'parameters'}->{'view_mode'} || 'html';
+
     # which host to display?
     my( $hostfilter, $servicefilter, $groupfilter ) = Thruk::Utils::Status::do_filter($c);
     return if $c->stash->{'has_error'};
@@ -306,19 +313,45 @@ sub _process_details_page {
     my $backend_order = $order;
     if( $sortoption == 6 ) { $backend_order = $order eq 'ASC' ? 'DESC' : 'ASC'; }
 
-    # get all services
-    my $services = $c->{'db'}->get_services( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'services' ), $servicefilter ], sort => { $backend_order => $sortoptions->{$sortoption}->[0] }, pager => $c );
+    my($columns, $keep_peer_addr, $keep_peer_name, $keep_peer_key, $keep_last_state, $keep_state_order);
+    if($view_mode eq 'json' and $c->{'request'}->{'parameters'}->{'columns'}) {
+        @{$columns} = split(/\s*,\s*/mx, $c->{'request'}->{'parameters'}->{'columns'});
+        my $col_hash = Thruk::Utils::array2hash($columns);
+        $keep_peer_addr   = delete $col_hash->{'peer_addr'};
+        $keep_peer_name   = delete $col_hash->{'peer_name'};
+        $keep_peer_key    = delete $col_hash->{'peer_key'};
+        $keep_last_state  = delete $col_hash->{'last_state_change_plus'};
+        $keep_state_order = delete $col_hash->{'state_order'};
+        @{$columns} = keys %{$col_hash};
+    }
 
-    my $view_mode = $c->{'request'}->{'parameters'}->{'view_mode'} || 'html';
-    if( defined $view_mode and $view_mode eq 'xls' ) {
+    # get all services
+    my $services = $c->{'db'}->get_services( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'services' ), $servicefilter ], sort => { $backend_order => $sortoptions->{$sortoption}->[0] }, pager => 1, columns => $columns  );
+
+    if(scalar @{$services} == 0) {
+        # try to find matching hosts, maybe we got some hosts without service
+        my $host_stats = $c->{'db'}->get_host_stats( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'hosts' ), $hostfilter ] );
+        $c->stash->{'num_hosts'} = $host_stats->{'total'};
+    }
+
+    if( $view_mode eq 'xls' ) {
         Thruk::Utils::Status::set_selected_columns($c);
-        my $filename = 'status.xls';
-        $c->res->header( 'Content-Disposition', qq[attachment; filename="] . $filename . q["] );
+        $c->res->header( 'Content-Disposition', 'attachment; filename="status.xls"' );
         $c->stash->{'data'}     = $services;
         $c->stash->{'template'} = 'excel/status_detail.tt';
         return $c->detach('View::Excel');
     }
-    if ( defined $view_mode and $view_mode eq 'json' ) {
+    if ( $view_mode eq 'json' ) {
+        # remove unwanted colums
+        if($columns) {
+            for my $s (@{$services}) {
+                delete $s->{'peer_addr'}              unless $keep_peer_addr;
+                delete $s->{'peer_name'}              unless $keep_peer_name;
+                delete $s->{'peer_key'}               unless $keep_peer_key;
+                delete $s->{'last_state_change_plus'} unless $keep_last_state;
+                delete $s->{'state_order'}            unless $keep_state_order;
+            }
+        }
         $c->stash->{'json'} = $services;
         return $c->detach('View::JSON');
     }
@@ -333,6 +366,8 @@ sub _process_details_page {
 # create the hostdetails page
 sub _process_hostdetails_page {
     my( $self, $c ) = @_;
+
+    my $view_mode = $c->{'request'}->{'parameters'}->{'view_mode'} || 'html';
 
     # which host to display?
     my( $hostfilter, $servicefilter, $groupfilter ) = Thruk::Utils::Status::do_filter($c);
@@ -360,11 +395,21 @@ sub _process_hostdetails_page {
     my $backend_order = $order;
     if( $sortoption == 6 ) { $backend_order = $order eq 'ASC' ? 'DESC' : 'ASC'; }
 
-    # get hosts
-    my $hosts = $c->{'db'}->get_hosts( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'hosts' ), $hostfilter ], sort => { $backend_order => $sortoptions->{$sortoption}->[0] }, pager => $c );
+    my($columns, $keep_peer_addr, $keep_peer_name, $keep_peer_key, $keep_last_state);
+    if($view_mode eq 'json' and $c->{'request'}->{'parameters'}->{'columns'}) {
+        @{$columns} = split(/\s*,\s*/mx, $c->{'request'}->{'parameters'}->{'columns'});
+        my $col_hash = Thruk::Utils::array2hash($columns);
+        $keep_peer_addr  = delete $col_hash->{'peer_addr'};
+        $keep_peer_name  = delete $col_hash->{'peer_name'};
+        $keep_peer_key   = delete $col_hash->{'peer_key'};
+        $keep_last_state = delete $col_hash->{'last_state_change_plus'};
+        @{$columns} = keys %{$col_hash};
+    }
 
-    my $view_mode = $c->{'request'}->{'parameters'}->{'view_mode'} || 'html';
-    if( defined $view_mode and $view_mode eq 'xls' ) {
+    # get hosts
+    my $hosts = $c->{'db'}->get_hosts( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'hosts' ), $hostfilter ], sort => { $backend_order => $sortoptions->{$sortoption}->[0] }, pager => 1, columns => $columns );
+
+    if( $view_mode eq 'xls' ) {
         Thruk::Utils::Status::set_selected_columns($c);
         my $filename = 'status.xls';
         $c->res->header( 'Content-Disposition', qq[attachment; filename="] . $filename . q["] );
@@ -372,14 +417,23 @@ sub _process_hostdetails_page {
         $c->stash->{'template'} = 'excel/status_hostdetail.tt';
         return $c->detach('View::Excel');
     }
-    if ( defined $view_mode and $view_mode eq 'json' ) {
+    if ( $view_mode eq 'json' ) {
+        # remove unwanted colums
+        if($columns) {
+            for my $h (@{$hosts}) {
+                delete $h->{'peer_addr'}              unless $keep_peer_addr;
+                delete $h->{'peer_name'}              unless $keep_peer_name;
+                delete $h->{'peer_key'}               unless $keep_peer_key;
+                delete $h->{'last_state_change_plus'} unless $keep_last_state;
+            }
+        }
         $c->stash->{'json'} = $hosts;
         return $c->detach('View::JSON');
     }
 
     $c->stash->{'orderby'}            = $sortoptions->{$sortoption}->[1];
     $c->stash->{'orderdir'}           = $order;
-    $c->stash->{'show_host_attempts'} = 0;
+    $c->stash->{'show_host_attempts'} = defined $c->config->{'show_host_attempts'} ? $c->config->{'show_host_attempts'} : 0;
 
     return 1;
 }
@@ -388,6 +442,8 @@ sub _process_hostdetails_page {
 # create the status details page
 sub _process_overview_page {
     my( $self, $c ) = @_;
+
+    $c->stash->{'columns'} = $c->{'request'}->{'parameters'}->{'columns'} || 3;
 
     # which host to display?
     my( $hostfilter, $servicefilter, $hostgroupfilter, $servicegroupfilter ) = Thruk::Utils::Status::do_filter($c);
@@ -801,7 +857,7 @@ sub _process_combined_page {
 
     my $services            = $c->{'db'}->get_services( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'services' ), $servicefilter ],
                                                         sort   => { $order => $sortoptions->{$sortoption}->[0] },
-                                                        pager  => $c );
+                                                      );
     $c->stash->{'services'} = $services;
     if( $sortoption == 6 and defined $services ) { @{ $c->stash->{'services'} } = reverse @{ $c->stash->{'services'} }; }
 
@@ -825,10 +881,27 @@ sub _process_combined_page {
 
     my $hosts            = $c->{'db'}->get_hosts( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'hosts' ), $hostfilter ],
                                                   sort   => { $order => $sortoptions->{$sortoption}->[0] },
-                                                  pager  => $c );
+                                                );
     $c->stash->{'hosts'} = $hosts;
-    $c->stash->{'show_host_attempts'} = 1;
+    $c->stash->{'show_host_attempts'} = defined $c->config->{'show_host_attempts'} ? $c->config->{'show_host_attempts'} : 1;
     if( $sortoption == 6 and defined $hosts ) { @{ $c->stash->{'hosts'} } = reverse @{ $c->stash->{'hosts'} }; }
+
+    my $view_mode = $c->{'request'}->{'parameters'}->{'view_mode'} || 'html';
+    if( $view_mode eq 'xls' ) {
+        Thruk::Utils::Status::set_selected_columns($c);
+        $c->res->header( 'Content-Disposition', 'attachment; filename="status.xls"' );
+        $c->stash->{'hosts'}    = $hosts;
+        $c->stash->{'services'} = $services;
+        $c->stash->{'template'} = 'excel/status_combined.tt';
+        return $c->detach('View::Excel');
+    }
+    if ( $view_mode eq 'json' ) {
+        $c->stash->{'json'} = {
+            'hosts'    => $hosts,
+            'services' => $services,
+        };
+        return $c->detach('View::JSON');
+    }
 
     # set audio file to play
     Thruk::Utils::Status::set_audio_file($c);

@@ -8,10 +8,14 @@ eval "use Test::Cmd";
 plan skip_all => 'Test::Cmd required' if $@;
 
 BEGIN {
-    plan skip_all => 'backends required' if(!-f 'thruk_local.conf' and !defined $ENV{'CATALYST_SERVER'});
-}
+    plan skip_all => 'backends required' if(!-s 'thruk_local.conf' and !defined $ENV{'CATALYST_SERVER'});
+    plan skip_all => 'local test only'   if defined $ENV{'CATALYST_SERVER'};
+    plan skip_all => 'test skipped'      if defined $ENV{'NO_DISABLED_PLUGINS_TEST'};
 
-BEGIN {
+    # enable plugin
+    `cd plugins/plugins-enabled && rm -f reports2`;
+    `cd plugins/plugins-enabled && ln -s ../plugins-available/reports .`;
+
     use lib('t');
     require TestUtils;
     import TestUtils;
@@ -120,5 +124,10 @@ TestUtils::test_command({
     cmd  => $BIN.' "/thruk/cgi-bin/reports.cgi?action=remove&report=9999"',
     like => ['/^OK - report removed$/'],
 });
+
+# restore default
+`cd plugins/plugins-enabled && rm -f reports`;
+`cd plugins/plugins-enabled && ln -s ../plugins-available/reports2 .`;
+unlink('root/thruk/plugins/reports');
 
 done_testing();

@@ -3,10 +3,12 @@ package Thruk::Utils::Conf;
 use strict;
 use warnings;
 use POSIX qw(tzset);
+use Carp;
 use File::Slurp;
 use Digest::MD5 qw(md5_hex);
 use Storable qw/store retrieve/;
 use Data::Dumper;
+use Encode qw(decode);
 
 =head1 NAME
 
@@ -28,7 +30,7 @@ put objects model into stash
 
 =cut
 sub set_object_model {
-    my ( $c ) = @_;
+    my ( $c, $no_recursion ) = @_;
 
     $c->stash->{has_obj_conf} = scalar keys %{_get_backends_with_obj_config($c)};
 
@@ -38,13 +40,13 @@ sub set_object_model {
 
     $c->stats->profile(begin => "_update_objects_config()");
     my $model                    = $c->model('Objects');
-    my $peer_conftool            = $c->{'db'}->get_peer_by_key($c->stash->{'param_backend'})->{'configtool'};
-    $peer_conftool               = Thruk::Utils::Conf::get_default_peer_config($peer_conftool);
-    $c->stash->{'peer_conftool'} = $peer_conftool;
+    my $peer_conftool            = $c->{'db'}->get_peer_by_key($c->stash->{'param_backend'});
+    Thruk::Utils::Conf::get_default_peer_config($peer_conftool->{'configtool'});
+    $c->stash->{'peer_conftool'} = $peer_conftool->{'configtool'};
 
     # already parsed?
     if(    Thruk::Utils::Conf::get_model_retention($c)
-       and Thruk::Utils::Conf::init_cached_config($c, $peer_conftool, $model)
+       and Thruk::Utils::Conf::init_cached_config($c, $peer_conftool->{'configtool'}, $model)
     ) {
         # objects initialized
     }
@@ -63,11 +65,18 @@ sub set_object_model {
                                         );
             $model->currently_parsing($c->stash->{'param_backend'}, $c->stash->{'job_id'});
             $c->stash->{'obj_model_changed'} = 0 unless $c->{'request'}->{'parameters'}->{'refresh'};
+            if($c->config->{'no_external_job_forks'} == 1 and !$no_recursion) {
+                # should be parsed now
+                return set_object_model($c, 1);
+            }
             return;
         }
         return 0;
     }
-    $c->{'obj_db'}->{'stats'} = $c->{'stats'};
+
+    $c->{'obj_db'}->{'stats'}      = $c->{'stats'};
+    $c->{'obj_db'}->{'remotepeer'} = $peer_conftool if lc($peer_conftool->{'type'}) eq 'http';
+    $c->{'obj_db'}->remote_file_sync($c);
 
     if($c->{'obj_db'}->{'cached'}) {
         $c->stats->profile(begin => "checking objects");
@@ -108,11 +117,11 @@ sub read_objects {
     my $c             = shift;
     $c->stats->profile(begin => "read_objects()");
     my $model         = $c->model('Objects');
-    my $peer_conftool = $c->{'db'}->get_peer_by_key($c->stash->{'param_backend'})->{'configtool'};
-    my $obj_db        = $model->init($c->stash->{'param_backend'}, $peer_conftool, undef, $c->{'stats'});
+    my $peer_conftool = $c->{'db'}->get_peer_by_key($c->stash->{'param_backend'});
+    my $obj_db        = $model->init($c->stash->{'param_backend'}, $peer_conftool->{'configtool'}, undef, $c->{'stats'}, $peer_conftool);
     store_model_retention($c);
     $c->stash->{model_type} = 'Objects';
-    $c->stash->{model_init} = [ $c->stash->{'param_backend'}, $peer_conftool, $obj_db, $c->{'stats'} ];
+    $c->stash->{model_init} = [ $c->stash->{'param_backend'}, $peer_conftool->{'configtool'}, $obj_db, $c->{'stats'} ];
     $c->stats->profile(end => "read_objects()");
     return;
 }
@@ -122,18 +131,22 @@ sub read_objects {
 
 =head2 update_conf
 
+    update_conf($file, $data [, $md5] [, $defaults] [, $update_c]);
+
 update inline config
+
+    $file       file to change
+    $data       new data
+    $md5        md5 sum from the file when we read it. (use -1 to disable check)
+    $defaults   defaults for this file
+    $update_c   update c so thruk does not need to be restarted
 
 =cut
 sub update_conf {
-    my $file     = shift;
-    my $data     = shift;
-    my $md5      = shift;
-    my $defaults = shift;
-    my $update_c = shift;
+    my($file, $data, $md5, $defaults, $update_c) = @_;
 
     my($old_content, $old_data, $old_md5) = read_conf($file, $defaults);
-    if($md5 ne $old_md5) {
+    if($md5 ne '-1' and $md5 ne $old_md5) {
         return("cannot update, file has been changed since reading it.");
     }
 
@@ -315,23 +328,27 @@ sub get_component_as_string {
     my $string = "<Component Thruk::Backend>\n";
     for my $b (@{$backends}) {
         $string .= "    <peer>\n";
-        $string .= "        name   = ".$b->{'name'}."\n";
-        $string .= "        id     = ".$b->{'id'}."\n" if defined $b->{'id'};
-        $string .= "        type   = ".$b->{'type'}."\n";
-        $string .= "        hidden = ".$b->{'hidden'}."\n" if $b->{'hidden'};
-        $string .= "        groups = ".$b->{'groups'}."\n" if $b->{'groups'};
-        $string .= "        <options>\n";
-        $string .= "            peer = ".$b->{'options'}->{'peer'}."\n";
-        $string .= "            resource_file = ".$b->{'options'}->{'resource_file'}."\n" if defined $b->{'options'}->{'resource_file'};
-        $string .= "        </options>\n";
-        if(defined $b->{'configtool'}) {
+        $string .= "        name    = ".$b->{'name'}."\n";
+        $string .= "        id      = ".$b->{'id'}."\n"      if $b->{'id'};
+        $string .= "        type    = ".$b->{'type'}."\n";
+        $string .= "        hidden  = ".$b->{'hidden'}."\n"  if $b->{'hidden'};
+        $string .= "        groups  = ".$b->{'groups'}."\n"  if $b->{'groups'};
+        $string .= "        section = ".$b->{'section'}."\n" if $b->{'section'};
+        $string .= "        <options>\n" if(defined $b->{'options'} and scalar keys %{$b->{'options'}} > 0);
+        $string .= "            peer          = ".$b->{'options'}->{'peer'}."\n"          if $b->{'options'}->{'peer'};
+        $string .= "            resource_file = ".$b->{'options'}->{'resource_file'}."\n" if $b->{'options'}->{'resource_file'};
+        $string .= "            auth          = ".$b->{'options'}->{'auth'}."\n"          if $b->{'options'}->{'auth'};
+        $string .= "            proxy         = ".$b->{'options'}->{'proxy'}."\n"         if $b->{'options'}->{'proxy'};
+        $string .= "            remote_name   = ".$b->{'options'}->{'remote_name'}."\n"   if $b->{'options'}->{'remote_name'};
+        $string .= "        </options>\n" if(defined $b->{'options'} and scalar keys %{$b->{'options'}} > 0);
+        if(defined $b->{'configtool'} and scalar keys %{$b->{'configtool'}} > 0 and $b->{'type'} ne 'http') {
             $string .= "        <configtool>\n";
-            $string .= "            core_type      = ".$b->{'configtool'}->{'core_type'}."\n" if defined $b->{'configtool'}->{'core_type'};
-            $string .= "            core_conf      = ".$b->{'configtool'}->{'core_conf'}."\n" if defined $b->{'configtool'}->{'core_conf'};
-            $string .= "            obj_check_cmd  = ".$b->{'configtool'}->{'obj_check_cmd'}."\n" if defined $b->{'configtool'}->{'obj_check_cmd'};
-            $string .= "            obj_reload_cmd = ".$b->{'configtool'}->{'obj_reload_cmd'}."\n" if defined $b->{'configtool'}->{'obj_reload_cmd'};
+            $string .= "            core_type      = ".$b->{'configtool'}->{'core_type'}."\n"      if $b->{'configtool'}->{'core_type'};
+            $string .= "            core_conf      = ".$b->{'configtool'}->{'core_conf'}."\n"      if $b->{'configtool'}->{'core_conf'};
+            $string .= "            obj_check_cmd  = ".$b->{'configtool'}->{'obj_check_cmd'}."\n"  if $b->{'configtool'}->{'obj_check_cmd'};
+            $string .= "            obj_reload_cmd = ".$b->{'configtool'}->{'obj_reload_cmd'}."\n" if $b->{'configtool'}->{'obj_reload_cmd'};
             if(defined $b->{'configtool'}->{'obj_readonly'}) {
-                for my $readonly (ref $b->{'configtool'}->{'obj_readonly'} eq 'ARRAY' ? @{$b->{'configtool'}->{'obj_readonly'}} : [$b->{'configtool'}->{'obj_readonly'}]) {
+                for my $readonly (ref $b->{'configtool'}->{'obj_readonly'} eq 'ARRAY' ? @{$b->{'configtool'}->{'obj_readonly'}} : ($b->{'configtool'}->{'obj_readonly'})) {
                     $string .= "            obj_readonly   = ".$readonly."\n";
                 }
             }
@@ -533,6 +550,11 @@ sub store_model_retention {
 
     # try to save retention data
     eval {
+        # delete some useless references
+        for my $conf (values %{$model->{'configs'}}) {
+            delete $conf->{'stats'};
+            delete $conf->{'remotepeer'};
+        }
         my $data = {
             'configs'      => $model->{'configs'},
             'release_date' => $c->config->{'released'},
@@ -617,6 +639,56 @@ sub get_model_retention {
 
 ##########################################################
 
+=head2 get_root_folder
+
+return root folder for given files
+
+ex.: get_root_folder(['/etc/nagios/conf.d/test.cfg',
+                      '/etc/nagios/conf.d/test/blah.cfg'
+                     ])
+
+returns '/etc/nagios/conf.d'
+
+=cut
+sub get_root_folder {
+    my($files) = @_;
+    my $splited = {};
+    for my $file (@{$files}) {
+        my @paths = split(/\//mx, $file);
+        $splited->{$file} = \@paths;
+    }
+    my $root = "";
+    return $root if scalar @{$files} == 0;
+    my $x = 0;
+    while($x < 100) {
+        my $cur   = undef;
+        my $equal = 1;
+        for my $paths (values %{$splited}) {
+            if(!defined $paths->[$x]) {
+                $equal = 0;
+                last;
+            }
+            elsif(!defined $cur) {
+                $cur = $paths->[$x];
+            }
+            elsif($cur ne $paths->[$x]) {
+                $equal = 0;
+                last;
+            }
+        }
+        if($equal) {
+            $root .= $cur.'/';
+        } else {
+            last;
+        }
+        $x++;
+    }
+    $root =~ s/\/$//mx;
+    return $root;
+}
+
+##########################################################
+
 =head2 init_cached_config
 
 set current obj_db from cached config
@@ -663,6 +735,21 @@ sub get_default_peer_config {
 }
 
 ##########################################################
+
+=head2 decode_any
+
+read and decode string from either utf-8 or iso-8859-1
+
+=cut
+sub decode_any {
+    eval { $_[0] = decode( "utf8", $_[0], Encode::FB_CROAK ) };
+    if ( $@ ) { # input was not utf8
+        $_[0] = decode( "iso-8859-1", $_[0], Encode::FB_WARN );
+    }
+    return $_[0];
+}
+
+##########################################################
 sub _compare_configs {
     my($c1, $c2) = @_;
 
@@ -686,7 +773,12 @@ sub _link_obj {
     } else {
         $line = $obj->{'line'};
         $path = $obj->{'file'}->{'path'};
-        $link = 'data.id='.$obj->get_id();
+        my $id = $obj->get_id();
+        if($id eq 'new') {
+            $link = 'file='.$path.'&amp;line='.$line;
+        } else {
+            $link = 'data.id='.$obj->get_id();
+        }
     }
     my $shortpath = $path;
     $shortpath =~ s/.*\///gmx;
@@ -705,27 +797,30 @@ sub _get_backends_with_obj_config {
     my $firstpeer;
     $c->stash->{'param_backend'} = '';
 
+    # first hide all of them
+    for my $peer (@{$c->{'db'}->get_peers(1)}) {
+        if(scalar keys %{$peer->{'configtool'}} > 0) {
+            $c->stash->{'backend_detail'}->{$peer->{'key'}}->{'disabled'} = 6;
+        } else {
+            $c->stash->{'backend_detail'}->{$peer->{'key'}}->{'disabled'} = 5
+        }
+    }
+
     # first non hidden peer with object config enabled
-    for my $peer (@{$c->{'db'}->get_peers()}) {
-        $c->stash->{'backend_detail'}->{$peer->{'key'}}->{'disabled'} = 6;
+    for my $peer (@{$c->{'db'}->get_peers(1)}) {
         next if defined $peer->{'hidden'} and $peer->{'hidden'} == 1;
         if(scalar keys %{$peer->{'configtool'}} > 0) {
             $firstpeer = $peer->{'key'} unless defined $firstpeer;
             $backends->{$peer->{'key'}} = $peer->{'configtool'}
-        } else {
-            $c->stash->{'backend_detail'}->{$peer->{'key'}}->{'disabled'} = 5;
         }
     }
 
     # first peer with object config enabled
     if(!defined $firstpeer) {
-        for my $peer (@{$c->{'db'}->get_peers()}) {
-            $c->stash->{'backend_detail'}->{$peer->{'key'}}->{'disabled'} = 6;
+        for my $peer (@{$c->{'db'}->get_peers(1)}) {
             if(scalar keys %{$peer->{'configtool'}} > 0) {
                 $firstpeer = $peer->{'key'} unless defined $firstpeer;
                 $backends->{$peer->{'key'}} = $peer->{'configtool'}
-            } else {
-                $c->stash->{'backend_detail'}->{$peer->{'key'}}->{'disabled'} = 5;
             }
         }
     }

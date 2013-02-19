@@ -5,6 +5,7 @@ use warnings;
 use Carp;
 use Digest::MD5 qw(md5_hex);
 use Storable qw(dclone);
+use Scalar::Util qw/weaken/;
 use Monitoring::Config::Help;
 
 =head1 NAME
@@ -69,12 +70,31 @@ sub parse {
             if($self->{'type'} eq 'timeperiod' and $value =~ m/^\d{1,2}:\d{1,2}\-\d{1,2}:\d{1,2}/gmx) {
                 $self->{'conf'}->{$attr} = $value;
             } else {
-                push @{$parse_errors}, "unknown attribute: $attr in ".Thruk::Utils::Conf::_link_obj($self);
+                if($self->{'disabled'}) {
+                    push @{$self->{'comments'}}, $attr.' '.$value;
+                } else {
+                    push @{$parse_errors}, "unknown attribute: $attr in ".Thruk::Utils::Conf::_link_obj($self);
+                }
             }
         }
     }
 
     return $parse_errors;
+}
+
+##########################################################
+
+=head2 disable
+
+disable this object
+
+=cut
+sub disable {
+    my($self, $val) = @_;
+    $val = 1 unless defined $val;
+    $self->{'file'}->{'changed'} = 1 if $self->{'disabled'} != $val;
+    $self->{'disabled'} = $val;
+    return;
 }
 
 ##########################################################
@@ -89,21 +109,21 @@ in list context, returns [$text, $nr_comment_lines, $nr_object_lines]
 sub as_text {
     my($self) = @_;
 
+    my $disabled = $self->{'disabled'} ? '#' : '';
+
     # save comments
-    my $text             = "";
     my $nr_object_lines  = 0;
-    for my $line (@{$self->{'comments'}}) {
-        $line =~ s/^#\s+//gmxo;
-        $line =~ s/^;\s+//gmxo;
-        unless(substr($line,0,1) eq '#' or substr($line,0,1) eq ';') {
-            $line = '# '.$line;
-        }
-        $line =~ s/\s+$//gmx;
-        $text .= $line."\n";
-    }
+    my $text             = Monitoring::Config::Object::format_comments($self->{'comments'});
     my $nr_comment_lines = scalar @{$self->{'comments'}};
 
+    # remove completly empty comments
+    if(join('', @{$self->{'comments'}}) =~ /^\s*$/mx) {
+        $nr_comment_lines = 0;
+        $text = "";
+    }
+
     # save object itself
+    $text .= $disabled;
     $text .= "define ".$self->{'type'}." {\n"; $nr_object_lines++;
 
     for my $key (@{$self->get_sorted_keys()}) {
@@ -117,11 +137,42 @@ sub as_text {
         } else {
             $value = $self->{'conf'}->{$key};
         }
+
         # empty values are valid syntax
         $value = '' unless defined $value;
-        $text .= sprintf "  %-30s %s\n", $key, $value;
-        $nr_object_lines++
+
+        # break very long lines
+        if($key eq 'command_line' and length($key) + length($value) > 120) {
+            my $long_command = $self->_break_long_command($key, $value, $disabled);
+            $text .= $disabled.join(" \\\n".$disabled, @{$long_command})."\n";
+            $nr_object_lines += scalar @{$long_command};
+            if($self->{'inl_comments'}->{$key}) {
+                chomp($text);
+                my $ind      = rindex($text, "\n");
+                my $lastline = substr($text, $ind+1);
+                $text        = substr($text, 0, $ind);
+                $text       .= "\n";
+                $text       .= sprintf "%-68s %s\n", $lastline, $self->{'inl_comments'}->{$key};
+            }
+        } else {
+            $text .= $disabled;
+            my $line;
+            if($value ne '') {
+                $line = sprintf "  %-30s %s", $key, $value;
+            } else {
+                # empty values are allowed
+                $line = sprintf "  %s", $key;
+            }
+            if($self->{'inl_comments'}->{$key}) {
+                $text .= sprintf "%-68s %s", $line, $self->{'inl_comments'}->{$key};
+            } else {
+                $text .= $line;
+            }
+            $text .= "\n";
+            $nr_object_lines++;
+        }
     }
+    $text .= $disabled;
     $text .= "}\n\n";
     $nr_object_lines += 2;
 
@@ -212,9 +263,12 @@ return the primary objects name
 
 =cut
 sub get_primary_name {
-    my $self = shift;
-    my $full = shift || 0;
-    my $conf = shift || $self->{'conf'};
+    my $self     = shift;
+    my $full     = shift || 0;
+    my $conf     = shift || $self->{'conf'};
+    my $fallback = shift;
+
+    return $fallback if defined $fallback;
 
     return if defined $conf->{'register'} and $conf->{'register'} == 0;
 
@@ -246,6 +300,18 @@ sub get_primary_name {
     return([$primary, $secondary]);
 }
 
+##########################################################
+
+=head2 get_primary_name_as_text
+
+return the primary name as text
+
+=cut
+
+sub get_primary_name_as_text {
+    my($self, $fallback) = @_;
+    return $fallback;
+}
 
 ##########################################################
 
@@ -255,12 +321,13 @@ return the objects name plus alias
 
 =cut
 sub get_long_name {
-    my $self = shift;
+    my($self, $fallback, $seperator) = @_;
+    $seperator = ' - ' unless defined $seperator;
     my $name =  $self->get_name();
     if(defined $self->{'conf'}->{'alias'} and $self->{'conf'}->{'alias'} ne $name) {
-        return $name." - ".$self->{'conf'}->{'alias'};
+        return $name.$seperator.$self->{'conf'}->{'alias'};
     }
-    return $name;
+    return $name || $fallback;
 }
 
 
@@ -309,19 +376,31 @@ sub get_computed_config {
                     $conf->{$key} = $t->{'conf'}->{$key};
                 }
                 elsif( defined $self->{'default'}->{$key}
-                      and $self->{'default'}->{$key}->{'type'} eq 'LIST'
-                      and substr($t->{'conf'}->{$key}->[0], 0, 1) eq '+'
-                ) {
+                      and $self->{'default'}->{$key}->{'type'} eq 'LIST')
+                {
+                    if(substr($conf->{$key}->[0], 0, 1) eq '+') {
                         # merge uniq list elements together
-                        my $list         = dclone($t->{'conf'}->{$key});
-                        $list->[0]       = substr($list->[0], 1);
-                        $conf->{$key}    = [] unless defined $conf->{$key};
-                        @{$conf->{$key}} = sort @{Thruk::Utils::array_uniq([@{$list}, @{$conf->{$key}}])};
+                        my $list           = dclone($t->{'conf'}->{$key});
+                        $conf->{$key}->[0] = substr($conf->{$key}->[0], 1);
+                        @{$conf->{$key}}   = sort @{Thruk::Utils::array_uniq([@{$list}, @{$conf->{$key}}])};
+                        $conf->{$key}->[0] = '+'.$conf->{$key}->[0];
+                    }
                 }
             }
         }
     }
     delete $conf->{'use'};
+
+    # remove + signs
+    for my $key (keys %{$conf}) {
+        if( defined $self->{'default'}->{$key}
+                and $self->{'default'}->{$key}->{'type'} eq 'LIST'
+                and defined $conf->{$key}->[0]
+                and substr($conf->{$key}->[0], 0, 1) eq '+')
+        {
+            $conf->{$key}->[0] = substr($conf->{$key}->[0], 1);
+        }
+    }
 
     my @keys = sort _sort_by_object_keys keys %{$conf};
     $self->{'cache'}->{'computed'}->{$self->{'id'}} = [\@keys, $conf];
@@ -604,6 +683,46 @@ sub set_uniq_id {
 
 ##########################################################
 
+=head2 set_name
+
+sets new name for this object
+
+=cut
+sub set_name {
+    my($self, $newname) = @_;
+
+    die("no new name!") unless defined $newname;
+
+    my $conf = $self->{'conf'};
+    if(defined $conf->{'register'} and $conf->{'register'} == 0) {
+        $conf->{'name'} = $newname;
+        return;
+    }
+
+    if(ref $self->{'primary_key'} eq '') {
+        $conf->{$self->{'primary_key'}} = $newname;
+    }
+
+    return;
+}
+
+##########################################################
+
+=head2 set_file
+
+sets a new file
+
+=cut
+sub set_file {
+    my($self, $newfile) = @_;
+    $self->{'file'} = $newfile;
+    # otherwise we create circular references
+    weaken $self->{'file'};
+    return;
+}
+
+##########################################################
+
 =head2 _sort_by_object_keys
 
 sort function for object keys
@@ -623,6 +742,8 @@ sub _sort_by_object_keys {
         "servicegroup_name",
         "command_name",
         "alias",
+        "address",
+        "parents",
         "use",
         "monday",
         "tuesday",
@@ -701,8 +822,73 @@ sub _make_id {
     return $digest;
 }
 
+##########################################################
+sub _count_quotes {
+    my($string, $char, $number) = @_;
+    my @chars = split//mx, $_[0];
+    my $size  = scalar @chars - 1;
+    for my $x (0..$size) {
+        if($chars[$x] eq $char and $chars[$x-1] ne '\\') {
+            if($number) {
+                $number--;
+            } else {
+                $number++;
+            }
+        }
+    }
+    return($number, $char);
+}
 
 ##########################################################
+sub _break_long_command {
+    my($self,$key,$value) = @_;
+    my @text;
+    my @chunks = split(/(\s+[\-]{1,2}\w+|\s+[\|]{1}\s+|\s+>>\s*)/mx ,$value);
+    my $first = shift @chunks;
+    Monitoring::Config::File::StripTSpace($first);
+    push @text, sprintf("  %-30s %s", $key, $first);
+    my $size = scalar @chunks;
+    my $arg  = 1;
+    my $x    = 0;
+    my $line = '';
+    while($x < $size) {
+        my $chunk = $chunks[$x];
+        if($arg) {
+            Monitoring::Config::File::StripLSpace($chunk);
+            if(index($chunk, '-') == 0) { $chunk = '  '.$chunk; }
+            if(index($chunk, '>') == 0) { $chunk = '  '.$chunk; }
+            $line .= sprintf "%-33s %s", '', $chunk;
+            $arg   = 0;
+        } else {
+            $line    .= $chunk;
+            my $si    = index($chunk, "'");
+            my $di    = index($chunk, '"');
+            my $char  = '';
+            my $count = 0;
+            if(    $si == -1 and $di == -1)               { $char = '';  }
+            elsif(($si == -1 and $di >=  0) or ($di != -1 and $di < $si)) { $char = '"'; }
+            elsif(($di == -1 and $si >=  0) or ($si != -1 and $si < $di)) { $char = "'"; }
+            if($char) {
+                # append all chunks till our quotes are balanced
+                ($count, $char) = _count_quotes($chunk, $char, $count);
+                while($count > 0) {
+                    last unless defined $chunks[$x+1];
+                    $x++;
+                    $chunk = $chunks[$x];
+                    $line .= $chunk;
+                    ($count, $char) = _count_quotes($chunk, $char, $count);
+                }
+            }
+
+            $arg   = 1;
+            push @text, $line;
+            $line = '';
+        }
+        $x++;
+    }
+    return \@text;
+}
+
 
 =head1 AUTHOR
 

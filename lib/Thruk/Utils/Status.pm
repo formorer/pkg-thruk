@@ -422,7 +422,8 @@ sub fill_totals_box {
     return 1 if($c->stash->{'no_totals'} and !$force);
 
     # host status box
-    my $host_stats = {};
+    my $host_stats    = {};
+    my $service_stats = {};
     if(   defined $c->stash->{style} and $c->stash->{style} eq 'detail'
        or ( $c->stash->{'servicegroup'}
             and ( $c->stash->{style} eq 'overview' or $c->stash->{style} eq 'grid' or $c->stash->{style} eq 'summary' )
@@ -430,6 +431,13 @@ sub fill_totals_box {
       ) {
         # set host status from service query
         my $services = $c->{'db'}->get_hosts_by_servicequery( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'services' ), $servicefilter ] );
+        $service_stats = {
+            'pending'         => 0,
+            'ok'              => 0,
+            'warning'         => 0,
+            'unknown'         => 0,
+            'critical'        => 0,
+        };
         $host_stats = {
             'pending'                   => 0,
             'up'                        => 0,
@@ -440,6 +448,15 @@ sub fill_totals_box {
         };
         my %hosts;
         for my $service (@{$services}) {
+            if($service->{'has_been_checked'} == 1) {
+                $service_stats->{'ok'}++        if $service->{'state'} == 0;
+                $service_stats->{'warning'}++   if $service->{'state'} == 1;
+                $service_stats->{'critical'}++  if $service->{'state'} == 2;
+                $service_stats->{'unknown'}++   if $service->{'state'} == 3;
+            }
+            if($service->{'has_been_checked'} == 0) {
+                $service_stats->{'pending'}++;
+            }
             next if defined $hosts{$service->{'host_name'}};
             $hosts{$service->{'host_name'}} = 1;
 
@@ -455,12 +472,13 @@ sub fill_totals_box {
             }
         }
     } else {
-        $host_stats = $c->{'db'}->get_host_stats( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'hosts' ), $hostfilter ] );
+        $host_stats    = $c->{'db'}->get_host_stats( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'hosts' ), $hostfilter ] );
+        $service_stats = $c->{'db'}->get_service_stats( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'services' ), $servicefilter ] );
     }
     $c->stash->{'host_stats'} = $host_stats;
 
     # services status box
-    $c->stash->{'service_stats'} = $c->{'db'}->get_service_stats( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'services' ), $servicefilter ] );
+    $c->stash->{'service_stats'} = $service_stats;
 
     # set audio file to play
     Thruk::Utils::Status::set_audio_file($c);
@@ -571,6 +589,7 @@ sub single_search {
             if($1 eq 'se') { $filter->{'type'} = 'service';      }
             if($1 eq 'sg') { $filter->{'type'} = 'servicegroup'; }
             $filter->{'value'} = substr($filter->{'value'}, 3);
+            $filter->{'op'}    = '=';
         }
 
         my $value  = $filter->{'value'};
@@ -710,6 +729,10 @@ sub single_search {
                 push @servicefilter, { next_check => { $dateop => $date } };
             }
         }
+        elsif ( $filter->{'type'} eq 'number of services' ) {
+            push @hostfilter,    { num_services => { $op => $value } };
+            push @servicefilter, { host_num_services => { $op => $value } };
+        }
         elsif ( $filter->{'type'} eq 'latency' ) {
             push @hostfilter,    { latency => { $op => $value } };
             push @servicefilter, { latency => { $op => $value } };
@@ -745,16 +768,16 @@ sub single_search {
             push @servicefilter,       { host_parents => { $listop => $value } };
             push @servicetotalsfilter, { host_parents => { $listop => $value } };
         }
-        # Impacts are only available in Shinken
-        elsif ( $filter->{'type'} eq 'impact' && $c->stash->{'enable_shinken_features'}) {
+        # Root Problems are only available in Shinken
+        elsif ( $filter->{'type'} eq 'rootproblem' && $c->stash->{'enable_shinken_features'}) {
             next unless $c->stash->{'enable_shinken_features'};
             push @hostfilter,          { source_problems      => { $listop => $value } };
             push @hosttotalsfilter,    { source_problems      => { $listop => $value } };
             push @servicefilter,       { source_problems      => { $listop => $value } };
             push @servicetotalsfilter, { source_problems      => { $listop => $value } };
         }
-        # Root Problems are only available in Shinken
-        elsif ( $filter->{'type'} eq 'rootproblem' && $c->stash->{'enable_shinken_features'}) {
+        # Impacts are only available in Shinken
+        elsif ( $filter->{'type'} eq 'impact' && $c->stash->{'enable_shinken_features'}) {
             next unless $c->stash->{'enable_shinken_features'};
             push @hostfilter,          { impacts      => { $listop => $value } };
             push @hosttotalsfilter,    { impacts      => { $listop => $value } };
@@ -762,7 +785,7 @@ sub single_search {
             push @servicetotalsfilter, { impacts      => { $listop => $value } };
         }
         # Business Impact (criticity) is only available in Shinken
-        elsif ( $filter->{'type'} eq 'business impact' ) {
+        elsif ( $filter->{'type'} eq 'business impact' || $filter->{'type'} eq 'priority' ) {
             next unless $c->stash->{'enable_shinken_features'};
             push @hostfilter,    { criticity => { $op => $value } };
             push @servicefilter, { criticity => { $op => $value } };
@@ -1352,20 +1375,23 @@ set selected columns for the excel export
 =cut
 sub set_selected_columns {
     my($c) = @_;
-    my $columns = {};
-    my $last_col = 30;
-    for my $x (0..30) { $columns->{$x} = 1; }
-    if(defined $c->{'request'}->{'parameters'}->{'columns'}) {
-        $last_col = 0;
-        for my $x (0..30) { $columns->{$x} = 0; }
-        my $cols = $c->{'request'}->{'parameters'}->{'columns'};
-        for my $nr (ref $cols eq 'ARRAY' ? @{$cols} : ($cols)) {
-            $columns->{$nr} = 1;
-            $last_col++;
+
+    for my $prefix ('', 'host_', 'service_') {
+        my $columns = {};
+        my $last_col = 30;
+        for my $x (0..30) { $columns->{$x} = 1; }
+        if(defined $c->{'request'}->{'parameters'}->{$prefix.'columns'}) {
+            $last_col = 0;
+            for my $x (0..30) { $columns->{$x} = 0; }
+            my $cols = $c->{'request'}->{'parameters'}->{$prefix.'columns'};
+            for my $nr (ref $cols eq 'ARRAY' ? @{$cols} : ($cols)) {
+                $columns->{$nr} = 1;
+                $last_col++;
+            }
         }
+        $c->stash->{$prefix.'last_col'} = chr(65+$last_col-1);
+        $c->stash->{$prefix.'columns'}  = $columns;
     }
-    $c->stash->{'last_col'} = chr(65+$last_col-1);
-    $c->stash->{'columns'}  = $columns;
     return;
 }
 

@@ -17,6 +17,7 @@ use Data::Dumper;
 use Date::Calc qw/Localtime Today/;
 use Date::Manip;
 use URI::Escape;
+use JSON::XS;
 
 ##############################################
 
@@ -362,6 +363,31 @@ sub escape_quotes {
     return $string;
 }
 
+########################################
+
+=head2 json_encode
+
+  json_encode(...)
+
+returns json encoded string
+
+=cut
+sub json_encode {
+    return JSON::XS::encode_json([@_]);
+}
+
+########################################
+
+=head2 encode_json_obj
+
+  encode_json_obj(array)
+
+returns json encoded object
+
+=cut
+sub encode_json_obj {
+    return JSON::XS::encode_json($_[0]);
+}
 
 ########################################
 
@@ -440,6 +466,23 @@ sub name2id {
         $return = $opt_prefix."_".$return;
     }
     return($return);
+}
+
+
+########################################
+
+=head2 uniqnumber
+
+  uniqnumber()
+
+return uniq number which can be used in html ids
+
+=cut
+sub uniqnumber {
+    our $uniqnumber;
+    $uniqnumber = 0 unless defined $uniqnumber;
+    $uniqnumber++;
+    return $uniqnumber;
 }
 
 
@@ -635,6 +678,33 @@ sub logline_icon {
 
     return $pic;
 }
+
+
+########################################
+
+=head2 button
+
+  my $html = button($link, $value, $class)
+
+returns button html source
+
+=cut
+sub button {
+    my($link, $value, $class) = @_;
+
+    my($page, $args) = split(/\?/mx, $link, 2);
+    $args =~ s/&amp;/&/gmx;
+
+    my $html = '<form action="'.$page.'" method="POST">';
+    for my $a (split/\&/mx, $args) {
+        my($k,$v) = split(/=/mx,$a,2);
+        $html   .= '<input type="hidden" name="'.$k.'" value="'.$v.'">';
+    }
+    $html   .= '<button class="conf_save_reload_button">save &amp; reload</button>';
+    $html   .= '</form>';
+    return $html;
+}
+
 
 
 ########################################

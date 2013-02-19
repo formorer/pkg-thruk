@@ -1,10 +1,10 @@
-Ext.define('TP.PanletGridHosts', {
+﻿Ext.define('TP.PanletGridHosts', {
     extend: 'TP.PanletGrid',
 
     title:  'Hosts',
     height: 200,
     width:  800,
-    maximizable: true,
+    //maximizable: true, // does not work stateful
     has_search_button: 'host',
     initComponent: function() {
         this.callParent();

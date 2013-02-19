@@ -31,6 +31,9 @@ use POSIX ":sys_wait_h";
             allow        => all|user,
             wait_message => "display message while running the job"
             forward      => "forward on success"
+            background   => "return $jobid if set, or redirect otherwise"
+            nofork       => "don't fork"
+            no_shell     => "wrap command in a shell unless no_shell is set"
         }
     );
 
@@ -46,7 +49,10 @@ sub cmd {
         $cmd = $conf->{'cmd'};
     }
 
-    if($c->config->{'no_external_job_forks'}) {
+    if(   $c->config->{'no_external_job_forks'}
+       or $conf->{'nofork'}
+       or exists $c->{'request'}->{'parameters'}->{'noexternalforks'}
+    ) {
         local $ENV{REMOTE_USER} = $c->stash->{'remote_user'};
         my $out = `$cmd`;
         return _finished_job_page($c, $c->stash, undef, $out);
@@ -55,15 +61,20 @@ sub cmd {
     my ($id,$dir) = _init_external($c);
     return unless $id;
     my $pid       = fork();
+    die "fork() failed: $!" unless defined $pid;
 
     if ($pid) {
         return _do_parent_stuff($c, $dir, $pid, $id, $conf);
     } else {
         _do_child_stuff($c, $dir);
-        $ENV{REMOTE_USER} = $c->stash->{'remote_user'};
 
         open STDERR, '>', $dir."/stderr";
         open STDOUT, '>', $dir."/stdout";
+
+        # some db drivers need reconnect after forking
+        _reconnect($c);
+
+        $cmd = $cmd.'; echo $? > '.$dir."/rc" unless $conf->{'no_shell'};
 
         exec($cmd);
         exit(1); # just to be sure
@@ -80,6 +91,8 @@ sub cmd {
             allow        => all|user,
             wait_message => "display message while running the job"
             forward      => "forward on success"
+            backends     => "list of selected backends (keys)"
+            nofork       => "don't fork"
         }
     )
 
@@ -90,7 +103,14 @@ sub perl {
     my $c         = shift;
     my $conf      = shift;
 
-    if($c->config->{'no_external_job_forks'}) {
+    if(   $c->config->{'no_external_job_forks'}
+       or $conf->{'nofork'}
+       or exists $c->{'request'}->{'parameters'}->{'noexternalforks'}
+    ) {
+        if(defined $conf->{'backends'}) {
+            $c->{'db'}->disable_backends();
+            $c->{'db'}->enable_backends($conf->{'backends'});
+        }
         ## no critic
         my $rc = eval($conf->{'expr'});
         ## use critic
@@ -102,13 +122,17 @@ sub perl {
     my ($id,$dir) = _init_external($c);
     return unless $id;
     my $pid       = fork();
+    die "fork() failed: $!" unless defined $pid;
 
     if ($pid) {
         return _do_parent_stuff($c, $dir, $pid, $id, $conf);
     } else {
+        if(defined $conf->{'backends'}) {
+            $c->{'db'}->disable_backends();
+            $c->{'db'}->enable_backends($conf->{'backends'});
+        }
         eval {
             _do_child_stuff($c, $dir);
-            $ENV{REMOTE_USER} = $c->stash->{'remote_user'};
 
             do {
                 ## no critic
@@ -116,6 +140,10 @@ sub perl {
                 local *STDERR;
                 open STDERR, '>', $dir."/stderr";
                 open STDOUT, '>', $dir."/stdout";
+
+                # some db drivers need reconnect after forking
+                _reconnect($c);
+
                 eval($conf->{'expr'});
                 ## use critic
 
@@ -157,11 +185,12 @@ return true if process is still running
 
 =cut
 sub is_running {
-    my $c   = shift;
-    my $id  = shift;
+    my $c      = shift;
+    my $id     = shift;
+    my $nouser = shift;
     my $dir = $c->config->{'var_path'}."/jobs/".$id;
 
-    if( -f $dir."/user" ) {
+    if(!$nouser && -f $dir."/user" ) {
         my $user = read_file($dir."/user");
         chomp($user);
         carp('no remote_user') unless defined $c->stash->{'remote_user'};
@@ -205,6 +234,7 @@ sub get_status {
     if($is_running == 0) {
         $percent = 100;
         my @end  = stat($dir."/stdout");
+        $end[9]  = time() unless defined $end[9];
         $time    = $end[9] - $start[9];
     } elsif(-f $dir."/status") {
         $percent = read_file($dir."/status");
@@ -264,11 +294,12 @@ return result of a job
 
 =cut
 sub get_result {
-    my $c   = shift;
-    my $id  = shift;
+    my $c       = shift;
+    my $id      = shift;
+    my $nouser  = shift;
     my $dir = $c->config->{'var_path'}."/jobs/".$id;
 
-    if(-f $dir."/user") {
+    if(!$nouser && -f $dir."/user") {
         my $user = read_file($dir."/user");
         chomp($user);
         carp('no remote_user') unless defined $c->stash->{'remote_user'};
@@ -287,13 +318,21 @@ sub get_result {
     } elsif(-f $dir."/stderr") {
         @end = stat($dir."/stderr")
     }
+    unless(defined $end[9]) {
+        $end[9] = time();
+        $err    = 'job was killed';
+    }
 
     my $time = $end[9] - $start[9];
 
     my $stash;
     $stash = retrieve($dir."/stash") if -f $dir."/stash";
 
-    return($out,$err,$time, $dir,$stash);
+    my $rc;
+    $rc = read_file($dir."/rc") if -f $dir."/rc";
+    chomp($rc) if defined $rc;
+
+    return($out,$err,$time, $dir,$stash,$rc);
 }
 
 ##############################################
@@ -341,6 +380,7 @@ sub job_page {
         return $c->detach('/error/index/22') unless defined $dir;
         if(defined $stash and defined $stash->{'original_url'}) { $c->stash->{'original_url'} = $stash->{'original_url'} };
         if(defined $err and $err ne '') {
+            $c->error($err);
             $c->log->error($err);
             return $c->detach('/error/index/23')
         }
@@ -359,15 +399,19 @@ sub _do_child_stuff {
 
     delete $ENV{'THRUK_SRC'};
 
+    # don't use connection pool after forking
+    $ENV{'THRUK_NO_CONNECTION_POOL'} = 1;
+
+    # make remote user available
+    $ENV{REMOTE_USER} = $c->stash->{'remote_user'};
+
+    $|=1; # autoflush
+
     # close open filehandles
     for my $fd (0..1024) {
         POSIX::close($fd);
     }
 
-    # some db drivers need reconnect after forking
-    $c->{'db'}->reconnect();
-
-    $|=1; # autoflush
     return;
 }
 
@@ -413,7 +457,7 @@ sub _do_parent_stuff {
     }
 
     $c->stash->{'job_id'} = $id;
-    if(! defined $conf->{'background'}) {
+    if(!$conf->{'background'}) {
         return $c->response->redirect($c->stash->{'url_prefix'}."thruk/cgi-bin/job.cgi?job=".$id);
     }
     return $id;
@@ -519,6 +563,11 @@ sub _finished_job_page {
             $forward =~ s/^(http|https):\/\/.*?\//\//gmx;
             return $c->response->redirect($forward);
         }
+
+        if(defined $c->stash->{json}) {
+            $c->forward('Thruk::View::JSON');
+        }
+
         return;
     }
     $c->stash->{text}     = $out;
@@ -533,6 +582,16 @@ sub _clean_code_refs {
         delete $var->{$key} if ref $var->{$key} eq 'CODE';
     }
     return $var;
+}
+
+##############################################
+sub _reconnect {
+    my($c) = @_;
+    $c->{'db'}->reconnect() or do {
+        print STDERR "reconnect failed: ".$@;
+        kill($$);
+    };
+    return;
 }
 
 ##############################################

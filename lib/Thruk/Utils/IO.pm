@@ -15,6 +15,8 @@ use warnings;
 use Carp;
 use Fcntl ':mode';
 
+$Thruk::Utils::IO::config = undef;
+
 ##############################################
 =head1 METHODS
 
@@ -54,6 +56,47 @@ sub mkdir {
 
 ##############################################
 
+=head2 mkdir_r
+
+  mkdir_r($dirname)
+
+create folder recursive
+
+=cut
+
+sub mkdir_r {
+    for my $dirname (@_) {
+        my $path = '';
+        for my $part (split/(\/)/mx, $dirname) {
+            $path .= $part;
+            next if $path eq '';
+            Thruk::Utils::IO::mkdir($path) unless -d $path;
+        }
+    }
+    return 1;
+}
+
+##############################################
+
+=head2 write
+
+  write($path, $content, [ $mtime ])
+
+creates file and ensure permissions
+
+=cut
+
+sub write {
+    my($path,$content,$mtime) = @_;
+    open(my $fh, '>', $path) or die('cannot create file '.$path.': '.$!);
+    print $fh $content;
+    Thruk::Utils::IO::close($fh, $path);
+    utime($mtime, $mtime, $path) if $mtime;
+    return 1;
+}
+
+##############################################
+
 =head2 ensure_permissions
 
   ensure_permissions($mode, $path)
@@ -66,19 +109,23 @@ sub ensure_permissions {
     my($mode, $path) = @_;
     return unless -e $path;
 
+    return if defined $ENV{'THRUK_NO_TOUCH_PERM'};
+
     my @stat = stat($path);
     my $cur  = sprintf "%04o", S_IMODE($stat[2]);
 
+    $Thruk::Utils::IO::config = Thruk::Config::get_config() unless defined $Thruk::Utils::IO::config;
+    my $config = $Thruk::Utils::IO::config;
     # set modes
     if($mode eq 'file') {
-        if($cur ne '0660') {
-            chmod(0660, $path)
+        if($cur ne $config->{'mode_file'}) {
+            chmod(oct($config->{'mode_file'}), $path)
                 or warn("failed to ensure permissions (0660/$cur) with uid: ".$>." - ".$<." for ".$path.": ".$!."\n".`ls -dn $path`);
         }
     }
     elsif($mode eq 'dir') {
-        if($cur ne '0770') {
-            chmod(0770, $path)
+        if($cur ne $config->{'mode_dir'}) {
+            chmod(oct($config->{'mode_dir'}), $path)
                 or warn("failed to ensure permissions (0770/$cur) with uid: ".$>." - ".$<." for ".$path.": ".$!."\n".`ls -dn $path`);
         }
     }
@@ -94,7 +141,7 @@ sub ensure_permissions {
     }
 
     # change group
-    chown($uid, $ENV{'THRUK_GROUP_ID'}, $path);
+    chown($uid, $ENV{'THRUK_GROUP_ID'}, $path) if defined $ENV{'THRUK_GROUP_ID'};
     return;
 }
 

@@ -42,6 +42,7 @@ requires:
   Catalyst::View::JSON: 0
   Catalyst::View::PDF::Reuse: 0
   Catalyst::View::TT: 0
+  CatalystX::LeakChecker: 0
   Chart::Clicker: 0
   Chart::Clicker::Data::DataSet: 0
   Chart::Clicker::Data::Marker: 0
@@ -71,6 +72,7 @@ requires:
   Graphics::Color::RGB: 0
   HTML::Lint: 0
   JSON::XS: 0
+  LWP::Protocol::Net::Curl: 0
   LWP::UserAgent: 0
   List::Compare: 0
   List::MoreUtils: 0
@@ -79,10 +81,11 @@ requires:
   MIME::Lite: 0
   MRO::Compat: 0
   MongoDB: 0
-  Monitoring::Availability: 0.36
+  Monitoring::Availability: 0.4
   Monitoring::Livestatus: 0.74
   Monitoring::Livestatus::Class: 0.03
   Moose: 0
+  Net::HTTP: 6.02
   PDF::Reuse: 0
   Perl::Critic::Policy::Dynamic::NoIndirect: 0
   Perl::Critic::Policy::NamingConventions::ProhibitMixedCaseSubs: 0
@@ -107,4 +110,4 @@ resources:
   homepage: http://www.thruk.org
   license: http://opensource.org/licenses/gpl-3.0.html
   repository: http://github.com/sni/Thruk
-version: 1.52
+version: 1.64

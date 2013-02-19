@@ -55,7 +55,7 @@ $Monitoring::Config::Object::Types = [
 =head2 new
 
     new({
-        coretype => coretype,  # can be nagios, icinga or shinken
+        coretype => coretype,  # can be nagios, icinga, shinken or any
         type     => type,
         line     => nr,
         file     => file object,
@@ -94,9 +94,10 @@ sub new {
 
     $current_object->{'conf'}     = dclone( $conf->{'conf'} || {} );
     $current_object->{'line'}     = $conf->{'line'} || 0;
-    $current_object->{'file'}     = $conf->{'file'} if defined $conf->{'file'};
+    $current_object->set_file($conf->{'file'}) if defined $conf->{'file'};
     $current_object->{'comments'} = [];
     $current_object->{'id'}       = 'new';
+    $current_object->{'disabled'} = defined $conf->{'disabled'} ? $conf->{'disabled'} : 0;
 
     if(defined $conf->{'name'}) {
         if(ref $current_object->{'primary_key'} eq 'ARRAY') {
@@ -125,6 +126,40 @@ sub new {
     }
 
     return $current_object;
+}
+
+##########################################################
+
+=head2 format_comments
+
+    format_comments($comments)
+
+returns formated comments from config files
+
+=cut
+
+sub format_comments {
+    my($comments) = @_;
+    my $text = '';
+    my $num  = scalar @{$comments};
+    for my $l (@{$comments}) {
+        my $line = ''.$l;
+        $line =~ s/^;/\#/gmxo;
+        $line =~ s/^\#([^\#])/#\ $1/gmxo;
+        $line =~ s/^\#\s+//gmxo;
+        $line =~ s/\s+$//gmxo;
+        last if $num == 1 and ($line eq '' or $line eq '#');
+        if(substr($line,0,1) eq '#') {
+            $text .= $line."\n";
+        }
+        elsif($line eq '') {
+            $text .= "#\n";
+        }
+        else {
+            $text .= '# '.$line."\n";
+        }
+    }
+    return $text;
 }
 
 

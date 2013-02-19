@@ -207,6 +207,45 @@ sub remove_item {
 
 ##############################################
 
+=head2 has_group
+
+  has_group($c, $group)
+
+returns 1 if the current user has this group
+
+=cut
+sub has_group {
+    my($c, $group) = @_;
+
+    my $cache = $c->cache;
+    my $user  = $c->stash->{'remote_user'};
+    if($cache and $user) {
+        my $contactgroups = $cache->get($user);
+        if($contactgroups and $contactgroups->{'contactgroups'}->{$group}) {
+            return 1;
+       }
+    }
+    return 0;
+}
+
+##############################################
+
+=head2 has_role
+
+  has_role($c, $role)
+
+returns 1 if the current user has this role
+
+=cut
+sub has_role {
+    my($c, $role) = @_;
+
+    return 1 if $c->check_user_roles($role);
+    return 0;
+}
+
+##############################################
+
 =head2 _renew_navigation
 
   _renew_navigation()
@@ -227,7 +266,7 @@ sub _renew_navigation {
     my $additional_subitems = defined $Thruk::Utils::Menu::additional_subitems ? dclone($Thruk::Utils::Menu::additional_subitems) : [];
 
     ## no critic
-    eval(read_file($file));
+    eval("#line 1 $file\n".read_file($file));
     ## use critic
     if($@) {
         $c->log->error("error while loading navigation from ".$file.": ".$@);

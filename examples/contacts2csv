@@ -1,0 +1,97 @@
+#!/bin/bash
+
+# read rc files if exist
+[ -e ~/.profile ] && . ~/.profile
+[ -e ~/.thruk   ] && . ~/.thruk
+
+if [ -e $(dirname $0)/../lib/Thruk.pm -a $(cd `dirname $0` && pwd) != '/usr/share/thruk/examples' ]; then
+  export PERL5LIB="$PERL5LIB:$(dirname $0)/../lib:$(dirname $0)/../plugins/plugins-available/conf/lib";
+  if [ -z $CATALYST_CONFIG ]; then export CATALYST_CONFIG="$(dirname $0)/../"; fi
+elif [ ! -z $OMD_ROOT ]; then
+  export PERL5LIB=$OMD_ROOT/share/thruk/lib:$OMD_ROOT/share/thruk/plugins/plugins-available/conf/lib:$PERL5LIB
+  if [ -z $CATALYST_CONFIG ]; then export CATALYST_CONFIG="$OMD_ROOT/etc/thruk"; fi
+else
+  export PERL5LIB=$PERL5LIB:/usr/share/thruk/lib:/usr/share/thruk/plugins/plugins-available/conf/lib:/usr/lib/thruk/perl5;
+  if [ -z $CATALYST_CONFIG ]; then export CATALYST_CONFIG='/etc/thruk'; fi
+fi
+
+eval 'exec /usr/bin/perl -x $0 ${1+"$@"} ;'
+    if 0;
+
+#! -*- perl -*-
+# vim: expandtab:ts=4:sw=4:syntax=perl
+#line 24
+
+##############################################
+use strict;
+use warnings;
+use Pod::Usage;
+use Monitoring::Config;
+
+if(!defined $ARGV[0]) {
+    pod2usage( { -verbose => 2,  -exit => 3, -message => "\nERROR: missing argument: object.cache\n\n" } );
+}
+if(!-f $ARGV[0]) {
+    pod2usage( { -verbose => 2,  -exit => 3, -message => "\nERROR: ".$ARGV[0].': '.$!."\n\n" } );
+}
+
+my $odb      = Monitoring::Config->new({ obj_file => $ARGV[0], 'force' => 1 })->init();
+my $contacts = $odb->get_objects_by_type('contact');
+my $groups   = $odb->get_objects_by_type('contactgroup');
+my $def      = $odb->get_default_keys('contact', { no_alias => 1, sort => 1 });
+
+# convert groups
+my $groups_by_contact = {};
+for my $g (@{$groups}) {
+    my $name = $g->{'conf'}->{'contactgroup_name'};
+    for my $m (@{$g->{'conf'}->{'members'}}) {
+        $groups_by_contact->{$m}->{$name} = 1;
+    }
+}
+
+# print header
+print join(';', map(ucfirst, @{$def})), ";Groups\n";
+
+# print data
+for my $o (@{$contacts}) {
+    for my $attr (@{$def}) {
+        if(!defined $o->{'conf'}->{$attr}) {
+            print ";";
+        } else {
+            if(ref $o->{'conf'}->{$attr} eq 'ARRAY') {
+                print join(',', @{$o->{'conf'}->{$attr}}), ";";
+            } else {
+                print $o->{'conf'}->{$attr}, ";";
+            }
+        }
+    }
+    my $name = $o->{'conf'}->{'contact_name'};
+    print join(',', keys %{$groups_by_contact->{$name}});
+    print "\n";
+}
+
+exit 0;
+
+##############################################
+
+=head1 NAME
+
+contacts2csv - Command Line Utility which converts contacts from a object.cache file into csv
+
+=head1 SYNOPSIS
+
+Usage: contacts2csv .../object.cache
+
+=head1 DESCRIPTION
+
+This script coverts contacts from a object.cache file into csv
+
+=head1 EXAMPLE
+
+contacts2csv /tmp/object.cache > /tmp/contacts.csv
+
+=head1 AUTHOR
+
+2012, Sven Nierlein, <sven@consol.de>
+
+=cut

@@ -8,7 +8,7 @@ $Data::Dumper::Sortkeys = 1;
 
 BEGIN {
     plan skip_all => 'internal test only' if defined $ENV{'CATALYST_SERVER'};
-    plan skip_all => 'backends required' if(!-f 'thruk_local.conf' and !defined $ENV{'CATALYST_SERVER'});
+    plan skip_all => 'backends required' if(!-s 'thruk_local.conf' and !defined $ENV{'CATALYST_SERVER'});
     plan tests => 26;
 }
 
@@ -28,6 +28,9 @@ isa_ok($m, 'Thruk::Model::Thruk');
 my $b = $m->{'obj'};
 isa_ok($b, 'Thruk::Backend::Manager');
 
+my $c = TestUtils::get_c();
+$b->init( 'c' => $c );
+
 Log::Log4perl->easy_init($INFO);
 my $logger = Log::Log4perl->get_logger();
 $b->init(
@@ -38,13 +41,6 @@ is($b->{'initialized'}, 1, 'Backend Manager Initialized') or BAIL_OUT('no need t
 
 my $disabled_backends = $b->disable_hidden_backends();
 $b->disable_backends($disabled_backends);
-
-################################################################################
-# set verbose mode
-for my $backend ( @{$b->{'backends'}} ) {
-    #$backend->{'class'}->{'live'}->{'backend_obj'}->{'verbose'} = 1;
-    #$backend->{'class'}->{'live'}->{'backend_obj'}->{'logger'}  = $logger;
-}
 
 ################################################################################
 # get testdata
@@ -84,7 +80,14 @@ unlike($cmd->{'line_expanded'}, qr/SERVICEDESC/, 'expanded command line must not
 
 ################################################################################
 # now set a ressource file
+################################################################################
+# set resource file
 $b->{'config'}->{'resource_file'} = 't/data/resource.cfg';
+for my $backend ( @{$b->{'backends'}} ) {
+    if(defined $backend->{'resource_file'}) {
+        $backend->{'resource_file'} = $b->{'config'}->{'resource_file'};
+    }
+}
 $cmd = $b->expand_command(
     'host'    => $hosts->[0],
     'command' => {
@@ -112,6 +115,6 @@ is($cmd->{'line_expanded'}, '/tmp/check_test ', 'expanded command: '.$cmd->{'lin
 is($cmd->{'note'}, '', 'note should be empty');
 
 ################################################################################
-my $res1 = $b->_read_resource_file('t/data/resource.cfg');
-my $res2 = $b->_read_resource_file('t/data/resource2.cfg');
+my $res1 = Thruk::Utils::read_resource_file('t/data/resource.cfg');
+my $res2 = Thruk::Utils::read_resource_file('t/data/resource2.cfg');
 is_deeply($res1, $res2, 'parsing resource.cfg');

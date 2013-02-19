@@ -99,6 +99,11 @@ img.pref_pane_button {
   right: 4px;
   z-index: 100;
 }
+DIV.pref_pane_shadow {
+  height: 6px;
+  left: 6px;
+  top: 0px;
+}
 table.top_nav {
   border: 0px none;
   font-size: 10pt;
@@ -123,6 +128,30 @@ td.top_nav_pref {
   float: left;
   overflow: hidden;
   width: 80px;
+}
+
+DIV#site_panel {
+ position: fixed;
+ z-index: 5000;
+ left: 17px;
+ font-size:11px;
+}
+TABLE.site_panel {
+  background: #F0F1EE;
+  border: 1px solid black;
+  padding: 5px;
+}
+TABLE.site_panel TH.site_panel {
+  padding-right: 3px;
+  border-bottom: 1px solid grey;
+}
+TABLE.site_panel TD.site_panel {
+  padding-right: 3px;
+  padding-top: 4px;
+}
+TABLE.site_panel .notfirst {
+  border-left: 1px solid grey;
+  padding-left: 5px;
 }
 
 input.top_nav_pref_button {
@@ -199,11 +228,13 @@ input.button_peerHID {
 div.navbarsearch form fieldset {
   border: 0px;
   padding-top: 0px;
+  padding-left: 7px;
   padding-bottom: 0px;
 }
 
 div.navsection {
   margin:0px 0 8px;
+  position: relative;
 }
 
 div.navsectionlinks {
@@ -298,15 +329,21 @@ body.summary table.data {
 
 /* mouse over classes for inline command selection in status page */
 .tableRowHover {
-  background-color:#88BBD8;
-  cursor: pointer;
-}
-.tableRowSelected {
-  background-color:#609FD2;
   cursor: pointer;
 }
 .has_long_plugin_output {
   color: #0000FF;
+}
+TD.tableRowHover, TH.tableRowHover, TABLE.hoverable TR:hover TD {
+  filter: alpha(opacity = 70); /* IE 6, 7, 8 */
+  -ms-filter: "alpha(opacity = 70)"; /* ab IE 8 zusätzlich möglich */
+  opacity: .70; /* alle anderen Browser einschließlich IE 9 */
+}
+TD.tableRowSelected, TH.tableRowSelected {
+  cursor: pointer;
+  background: none;
+  background-color:#609FD2;
+  background-image: none;
 }
 
 /* command pane */
@@ -375,6 +412,20 @@ div.thruk_message table {
 }
 .fail_message {
   color: #FF0000;
+}
+
+.alert {
+  padding: 8px 35px 8px 14px;
+  margin-bottom: 18px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  border: 1px solid #FBEED5;
+  -webkit-border-radius: 4px;
+  -moz-border-radius: 4px;
+  border-radius: 4px;
+  display: inline-block;
+  color: #b94a48;
+  background-color: #f2dede;
+  border-color: #eed3d7;
 }
 
 /* show log filter */
@@ -560,6 +611,7 @@ td.stateInfoTable1 .dataVal {
   overflow: hidden;
   z-index: 2000;
   text-align: left;
+  font-weight: normal;
 }
 
 #search-results ul{
@@ -718,7 +770,7 @@ SPAN.deleteicon SPAN {
   position: absolute;
   display: block;
   top: -1px;
-  right: 3px;
+  right: 5px;
   width: 14px;
   height: 14px;
   background: url('../images/btn_close_small.png');
@@ -737,8 +789,14 @@ SPAN.deleteicon INPUT {
 .ui-save-button {
   background-image: url(../images/disk.png) !important;
 }
+.ui-apply-button {
+  background-image: url(../images/tick.png) !important;
+}
 .ui-remove-button {
   background-image: url(../images/delete.png) !important;
+}
+.ui-edit-button {
+  background-image: url(../images/edit.png) !important;
 }
 .ui-preview-button {
   background-image: url(../images/lightning_go.png) !important;
@@ -751,6 +809,22 @@ SPAN.deleteicon INPUT {
 }
 .ui-l-arrow-button {
   background-image: url(../images/arrow_left.png) !important;
+}
+.ui-applist-button {
+  background-image: url(../images/application_view_list.png) !important;
+}
+.ui-appicons-button {
+  background-image: url(../images/application_view_icons.png) !important;
+}
+.ui-appsidelist-button {
+  background-image: url(../images/application_side_list.png) !important;
+}
+.ui-appsidetree-button {
+  background-image: url(../images/application_side_tree.png) !important;
+}
+.ui-save_reload-button {
+  background-image: url(../images/disk_reload.png) !important;
+  margin-top: -7px !important;
 }
 button.ui-button span.ui-button-text {
   line-height: 1.0 !important;
@@ -853,6 +927,7 @@ DIV.perf_bar_bg {
     background: #C6C6C6;
     float: right;
     margin-right: 3px;
+    margin-left: 3px;
     border-top: 1px solid #999999;
     border-right: 1px solid #999999;
     -webkit-border-radius: 3px;
@@ -879,4 +954,8 @@ DIV.perf_bar_crit {
   border: 0;
   border-right: 1px solid #B36969;
   position: absolute;
+}
+
+TD.toolbar IMG {
+  vertical-align: text-bottom;
 }

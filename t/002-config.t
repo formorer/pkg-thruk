@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Data::Dumper;
-use Test::More tests => 3;
+use Test::More tests => 4;
 
 use_ok("Thruk");
 use_ok("Thruk::Config");
@@ -27,4 +27,18 @@ for my $key (qw/cgi_cfg_stat
     delete $config->{$key};
 }
 
+# name will be set upon initialization
+if(defined Thruk->config->{'Thruk::Backend'}->{'peer'}) {
+    my $backends = Thruk->config->{'Thruk::Backend'}->{'peer'};
+    if(ref $backends ne 'ARRAY') { $backends = [$backends]; }
+    for my $backend (@{$backends}) {
+        delete $backend->{options}->{name};
+        delete $backend->{use_curl};
+        delete $backend->{options}    if scalar keys %{$backend->{options}}    == 0;
+        delete $backend->{configtool} if scalar keys %{$backend->{configtool}} == 0;
+    }
+}
 is_deeply($config, Thruk->config, 'config matches');
+
+$config = Thruk::Config::get_config('t/data/test_c_style.conf');
+is($config->{'Thruk::Backend'}->{'peer'}->{'configtool'}->{'obj_readonly'}, '^(?!.*/test)', 'parsing c style comments');

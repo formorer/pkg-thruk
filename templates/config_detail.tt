@@ -2,10 +2,14 @@
 
     <table border="0" width="100%" cellspacing="0" cellpadding="0">
       <tr>
-        <td align="left" valign="top" width="50%">
+        <td align="left" valign="top" width="20%">
           [% PROCESS _infobox.tt %]
         </td>
-        <td align="right" valign="bottom" width="50%">
+        <td align="center" valign="bottom" width="60%">
+          <div align="center" class='dataTitle'>[% dataTitle %]</div>
+          <br>
+        </td>
+        <td align="right" valign="bottom" width="20%">
           <form method="get" action="config.cgi">
             <table border="0">
               <tr>
@@ -37,11 +41,21 @@
             </table>
           </form>
         </td>
+        <td>
+          <table border="0">
+            <tr>
+              <td align="left" class='reportSelectSubTitle'>Columns:</td>
+            </tr>
+            <tr>
+             <td>
+                <select style="height: 120px;" id='columns_sel' multiple='multiple' onchange="toggleVis(this)">
+                </select>
+              </td>
+           </tr>
+         </table>
+       </td>
       </tr>
     </table>
-    <br>
-    <div align="center" class='dataTitle'>[% dataTitle %]</div>
-    <br>
 
     <div align="center">[% PROCESS _pager.tt %]</div>
 
@@ -50,5 +64,73 @@
     <div align="center">[% PROCESS _pager.tt %]</div>
     <br>
     <div class='itemTotalsTitle'>[% IF data.size %][% data.size %] of [% pager.total_entries %][% ELSE %]0[% END %] Matching Entries Displayed</div>
+
+    <script type="text/javascript">
+    <!--
+
+var column_select = document.getElementById("columns_sel");
+var columns = new Array();
+jQuery('TH.data').each(function(i, col) {
+    if(i != 0 || col.innerHTML != 'Service') {
+      columns.push(col.innerHTML);
+    }
+});
+add_options(column_select, columns);
+jQuery("#columns_sel option").attr('selected',true);
+
+// Set the default "show" mode to that specified by W3C DOM
+// compliant browsers
+
+var showMode = 'table-cell';
+
+// However, IE5 at least does not render table cells correctly
+// using the style 'table-cell', but does when the style 'block'
+// is used, so handle this
+
+if (document.all) showMode='block';
+
+// This is the function that actually does the manipulation
+function toggleVis(sel){
+    var table = jQuery('TABLE.data')[0];
+    lines = table.getElementsByTagName('tr');
+
+    for ( k = 0; k < lines.length; k++) {
+        // Headers
+        h = lines[k].getElementsByTagName('th');
+        if (h.length == 2 && k == 0) {
+          if(sel.options[1].selected && sel.options[2].selected) {
+            lines[0].style.display = "";
+          } else {
+            lines[0].style.display = "none";
+          }
+        }
+        if (h.length == sel.options.length) {
+            for (var i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].selected == true) {
+                    h[i].style.display = showMode;
+                }
+                else {
+                    h[i].style.display = 'none';
+                }
+           }
+        }
+
+        // Rows
+        c = lines[k].getElementsByTagName('td');
+        if (c.length == sel.options.length) {
+            for (var i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].selected == true) {
+                    c[i].style.display = showMode;
+                }
+                else {
+                    c[i].style.display = 'none';
+                }
+            }
+        }
+    }
+
+}
+    -->
+    </script>
 
 [% PROCESS _footer.tt %]
