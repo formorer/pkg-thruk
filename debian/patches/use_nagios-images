@@ -1,0 +1,10 @@
+--- a/support/apache_fcgid.conf
++++ b/support/apache_fcgid.conf
+@@ -33,6 +33,7 @@
+   AliasMatch ^/thruk/plugins/(.*?)/(.*)$  /etc/thruk/plugins/plugins-enabled/$1/root/$2
+   Alias /thruk/themes/  /etc/thruk/themes/themes-enabled/
+   Alias /thruk /usr/share/thruk/root/thruk
++  Alias /thruk/themes/*/images/logos /usr/share/nagios/htdocs/images/logos
+ 
+   <Location /thruk>
+     Options ExecCGI
