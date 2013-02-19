@@ -6,3 +6,4 @@ var/cache/thruk
 var/log/thruk
 etc/thruk/themes/themes-available
 etc/thruk/plugins/plugins-available
+/var/cache/thruk/reports
