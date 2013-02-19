@@ -1,0 +1,129 @@
+﻿[% WRAPPER "_conf_bare.tt" body_class="bare_tree" %]
+
+<script type="text/javascript">
+<!--
+var tree_objects_layout = "[% tree_objects_layout %]";
+var objects_type        = "[% objects_type %]";
+-->
+</script>
+
+
+<!-- view switch and filter -->
+<table style="width:100%; position: fixed; top: 0; left: 0; z-index: 1000; background: white; border-bottom: 1px solid grey;">
+  <tr>
+    <td align="left" width="30%">
+      <div id="layout_set">
+        <input type="radio" name="layout" id="layout_icons"[% IF tree_objects_layout == "icons" %] checked[% END %]><label for="layout_icons">I</label>
+        <input type="radio" name="layout" id="layout_table"[% IF tree_objects_layout == "table" %] checked[% END %]><label for="layout_table">T</label>
+      </div>
+    </td>
+    <td></td>
+    <td align="right" width="30%">
+      <input type="text" id="search_filter" onkeyup="filter_objects(this.id)" onchange="filter_objects(this.id)" placeholder="filter objects" class="deletable">
+    </td>
+  </tr>
+</table>
+
+<!-- details view menu header -->
+<div class="browser_file_menu">
+  <div class="browser_file_image">&nbsp;</div>
+  <div class="browser_file_longtitle">Name</div>
+  <div class="browser_file_type">Type</div>
+  <div class="browser_file_template">Template</div>
+  <div class="browser_file_filename">File</div>
+  <div class="browser_file_linenr">Line</div>
+  <div class="browser_file_comments">Comments</div>
+</div>
+
+<!-- object elements -->
+[% FOREACH o = objects %]
+[% fullname  = o.get_long_name('&nbsp;') %]
+[% shortname = fullname %]
+[% type = o.get_type() %]
+[% IF shortname.length > 15 %][% shortname = shortname.substr(0,15) _ '..' %][% END %]
+[% filepath = o.file.display.replace(files_root,'/'); IF filepath.length > 50; filepath = filepath.substr(-50); END; filepath = '...' _ filepath %]
+<div class="jstree-draggable clickable browser_file_item" ondblclick="window.location='conf.cgi?bare=1&amp;sub=objects&amp;type=[% type %]&amp;data.id=[% o.get_id() %]&amp;referer=[% as_url_arg(short_uri(c, {referer => 'undef'})) %]'" title="[% fullname %]">
+  <img src="../plugins/conf/images/obj_[% type %].png" alt="config item">
+  <div class="browser_file_shorttitle">[% shortname %]</div>
+  <div class="browser_file_longtitle">[% fullname %]</div>
+  <div class="browser_file_type" title="[% type %]">[% type %]</div>
+  <div class="browser_file_template">[% IF o.is_template() %]yes[% ELSE %]no[% END %]</div>
+  <div class="browser_file_filename" title="[% o.file.display %]">[% filepath %]</div>
+  <div class="browser_file_linenr">[% o.line %]</div>
+  <div class="browser_file_comments" title="[% escape_html(o.comments.join('_-xXx-_')).replace('_-xXx-_','&#10;') %]">[% escape_html(o.comments.join(' ')) %]</div>
+</div>
+[% END %]
+
+<script type="text/javascript">
+<!--
+
+/* filtering stuff */
+var searchTimer = null;
+var input_id    = null;
+var last_filter = '';
+function filter_objects(id) {
+    input_id = id;
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout("do_filter_objects(input_id)", 300);
+}
+
+function do_filter_objects(id) {
+    var inp = document.getElementById(id);
+    var val = inp.value;
+    if(last_filter == val) { return; }
+    last_filter = val;
+    jQuery('DIV.browser_file_item').each(function(nr, e) {
+        // search filename in table layout too
+        // otherwise just the objects name
+        if(e.title.toLowerCase().match(val)
+           || (tree_objects_layout == "table"
+               && jQuery(e).find('DIV.browser_file_filename')[0].title.toLowerCase().match(val) )
+           || (objects_type == "all"
+               && tree_objects_layout == "table"
+               && jQuery(e).find('DIV.browser_file_type')[0].title.toLowerCase().match(val) )
+           || (tree_objects_layout == "table"
+               && jQuery(e).find('DIV.browser_file_comments')[0].title.toLowerCase().match(val) )
+        ) {
+            e.style.display="inherit";
+        } else {
+            e.style.display="none";
+        }
+    });
+}
+
+/* layout buttons */
+function init_tree_buttons() {
+    jQuery("#layout_set").buttonset();
+    jQuery('#layout_table').button({
+        icons: {primary: 'ui-applist-button'},
+        text: false,
+        label: 'show objects with details'
+    }).click(function() {
+        return set_tree_layout('table', 'icons');
+    });
+    jQuery('#layout_icons').button({
+        icons: {primary: 'ui-appicons-button'},
+        text: false,
+        label: 'show objects with icons'
+    }).click(function() {
+        return set_tree_layout('icons', 'table');
+    });
+
+    function set_tree_layout(on, off) {
+        jQuery('DIV.browser_file_item').removeClass('layout_'+off);
+        jQuery('DIV.browser_file_item').addClass('layout_'+on);
+        jQuery('DIV.browser_file_menu').removeClass('layout_'+off);
+        jQuery('DIV.browser_file_menu').addClass('layout_'+on);
+        tree_objects_layout = on;
+        cookieSave('thruk_obj_layout', on);
+        return true;
+    }
+
+    if(tree_objects_layout == 'icons') { set_tree_layout('icons', 'table') }
+    if(tree_objects_layout == 'table') { set_tree_layout('table', 'icons') }
+}
+
+-->
+</script>
+
+[% END %]

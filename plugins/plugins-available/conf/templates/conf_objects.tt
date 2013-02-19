@@ -1,4 +1,5 @@
-[% WRAPPER _conf_objects_frame.tt %]
+﻿[% IF bare %][% wrapper="_conf_bare.tt" %][% ELSE %][% wrapper="_conf_objects_frame.tt" %][% END %]
+[% WRAPPER $wrapper %]
 
 [% IF show_object %]
 
@@ -11,13 +12,14 @@
 [% END %]
 
 [% duplicate_keys = {} %]
-<form action="conf.cgi" method="POST">
+<form action="conf.cgi" method="POST" onsubmit="return conf_validate_object_form(this);">
 <input type="submit" name="send" value="save" style="display:none">
 <input type="hidden" name="sub" value="objects">
 <input type="hidden" name="type" value="[% type %]">
 <input type="hidden" name="data.id" value="[% object.get_id() %]">
 <input type="hidden" name="action" value="store">
-  <table border="0" class='data conftoolobj'>
+<input type="hidden" name="referer" value="[% referer %]">
+  <table border="0" class='data conftoolobj'[% IF bare %] width="100%"[% END %]>
     <tr>
       <th class='data[% IF subcat == 'config'    %] confSelected[% END %]' style="width:33%" id="sub_1" onclick="window.location.hash='#config';set_sub(1)"><a href="#config">Config</a></th>
       <th class='data[% IF subcat == 'templates' %] confSelected[% END %]' style="width:33%" id="sub_2" onclick="window.location.hash='#templates';set_sub(2)"><a href="#templates">Templates</a></th>
@@ -27,30 +29,35 @@
       <td colspan=3>
         <table style="width:100%">
           <tr>
-            <td style="width: 50px;" class="sub_1"></td>
+            <td style="width: 50px;" class="data dataSubmit sub_1">
+              [% IF referer %]
+              <button class="conf_back_button conf_button" onclick="window.location='[% referer %]'; return false;">back</button>
+              [% END %]
+            </td>
             <td class='dataVar dataUserVar'>
               [% IF object.defined('file') %]
-                [% IF object.conf.defined('register') && object.conf.register == 0 %]Template: [% END %]
-                [% object.get_long_name() %]
+                [% object.get_type() | ucfirst %][% IF object.conf.defined('register') && object.conf.register == 0 %]&nbsp;Template[% END %]:&nbsp;
+                [% object.get_long_name('&nbsp;') %]
+                [% IF object.disabled %]<span style="color: #EB6900"> (disabled)</span>[% END %]
               [% ELSE %]
                 new [% type %]
               [% END %]
               <span style="[% IF subcat != 'config' && subcat != 'comp' %]display:none;[% END %] font-weight:normal; font-size:smaller;" class="sub_1 sub_3">
                 <br>
                 [% IF object.defined('file') %]
-                  [% object.file.path %] [% IF object.line > 0 %] line [% object.line %][% END %][% IF object.file.readonly %] <span style="color: #EB6900"> (read-only)</span>[% END %]
+                  [% object.file.display %] [% IF object.line > 0 %] line [% object.line %][% END %][% IF object.file.readonly %] <span style="color: #EB6900"> (read-only)</span>[% END %]
                 [% ELSE %]
                   <span style="[% IF subcat != 'config' %]display:none;[% END %]" class="sub_1">
-                  save to: <input type="text" class="deletable" name="data.file" id="fileselect" value="[% new_file %]" onclick="ajax_search.init(this, 'file', { striped:false, autosubmit:false, templates:false, data:data, emptymsg:'file will be created'})">
+                  save to: <input type="text" class="deletable" placeholder="enter filename" name="data.file" id="fileselect" value="[% new_file %]" onclick="ajax_search.init(this, 'file', { striped:false, autosubmit:false, templates:false, data:data, emptymsg:'file will be created'})">
                   </span>
                 [% END %]
               </span>
             </td>
-            [% IF ! object.defined('file') || ! object.file.readonly %]
             <td style="width: 50px;" class="data dataSubmit sub_1">
-              <button class="conf_save_button conf_button">save</button>
+              [% IF ! object.defined('file') || ! object.file.readonly %]
+              <button class="conf_apply_button conf_button">apply</button>
+              [% END %]
             </td>
-            [% END %]
           </tr>
         </table>
       </td>
@@ -80,7 +87,7 @@
             <td class='dataVal' colspan=3 style="text-align:center">
               <span style="font-weight:normal;">
                 [% IF objs.size > 0 %]
-                [% objs.0.file.path %] line [% objs.0.line %]
+                [% objs.0.file.display %] line [% objs.0.line %]
                 [% IF objs.0.file.readonly %]<span style="color: #EB6900"> (read-only)</span>[% END %]
                 [% SET obj_id = objs.0.get_id() %]
                 [% ELSE %]
@@ -134,10 +141,10 @@
     [% IF ! object.defined('file') || ! object.file.readonly %]
     <tr style="[% IF subcat != 'config' %]display:none[% END %]" class="sub_1">
       <td colspan=3 class="data dataSubmit">
-        [% IF object.get_id() != 'new' %]
+        [% IF object.get_id() != 'new' && ! bare %]
         <input type="submit" name="send" value="raw edit" style="width:90px" class="conf_button">
         [% END %]
-        <button class="conf_save_button conf_button" style="width:90px">save</button>
+        <button class="conf_apply_button conf_button" style="width:90px">apply</button>
       </td>
     </tr>
     [% END %]

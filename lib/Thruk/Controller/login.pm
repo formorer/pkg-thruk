@@ -6,8 +6,6 @@ use utf8;
 use parent 'Catalyst::Controller';
 use Thruk::Utils::CookieAuth;
 
-use LWP::UserAgent;
-
 =head1 NAME
 
 Thruk::Controller::login - Catalyst Controller
@@ -35,8 +33,10 @@ sub login_cgi : Regex('thruk\/cgi\-bin\/login\.cgi') {
 =head2 index
 
 =cut
-sub index :Path :Args(0) :MyAction('AddDefaults') {
+sub index :Path :Args(0) {
     my ( $self, $c ) = @_;
+
+    $c->stats->profile(begin => "login::index");
 
     $c->stash->{'no_auto_reload'} = 1;
     $c->stash->{'theme'}          = $c->config->{'default_theme'} unless defined $c->stash->{'theme'};
@@ -51,32 +51,38 @@ sub index :Path :Args(0) :MyAction('AddDefaults') {
     my $sdir = $c->config->{'tmp_path'}.'/sessions';
     Thruk::Utils::IO::mkdir($sdir);
 
-    if($c->req->query_keywords eq 'logout') {
-        my $cookie = $c->request->cookie('thruk_auth');
-        $c->res->cookies->{'thruk_auth'} = {
-            value   => '',
-            expires => '-1M',
-            path    => $cookie_path,
-        };
-        if(defined $cookie and defined $cookie->value) {
-            my $sessionid = $cookie->value;
-            if($sessionid =~ m/^\w+$/mx and -f $sdir.'/'.$sessionid) {
-                unlink($sdir.'/'.$sessionid);
+    if(defined $c->req->query_keywords) {
+        if($c->req->query_keywords eq 'logout') {
+            my $cookie = $c->request->cookie('thruk_auth');
+            $c->res->cookies->{'thruk_auth'} = {
+                value   => '',
+                expires => '-1M',
+                path    => $cookie_path,
+                domain  => ($c->config->{'cookie_auth_domain'} ? $c->config->{'cookie_auth_domain'} : ''),
+            };
+            if(defined $cookie and defined $cookie->value) {
+                my $sessionid = $cookie->value;
+                if($sessionid =~ m/^\w+$/mx and -f $sdir.'/'.$sessionid) {
+                    unlink($sdir.'/'.$sessionid);
+                }
             }
+
+            Thruk::Utils::set_message( $c, 'success_message', 'logout successful' );
+            return $c->response->redirect($c->stash->{'url_prefix'}."thruk/cgi-bin/login.cgi");
         }
 
-        Thruk::Utils::set_message( $c, 'success_message', 'logout successful' );
-        return $c->response->redirect($c->stash->{'url_prefix'}."thruk/cgi-bin/login.cgi");
-    }
-
-    if($c->req->query_keywords eq 'nocookie') {
-        Thruk::Utils::set_message( $c, 'fail_message', 'login not possible without accepting cookies' );
-    }
-    if($c->req->query_keywords =~ /^expired\&(.*)$/mx) {
-        Thruk::Utils::set_message( $c, 'fail_message', 'session has expired' );
-    }
-    if($c->req->query_keywords =~ /^invalid\&(.*)$/mx) {
-        Thruk::Utils::set_message( $c, 'fail_message', 'session is not valid (anymore)' );
+        if($c->req->query_keywords eq 'nocookie') {
+            Thruk::Utils::set_message( $c, 'fail_message', 'login not possible without accepting cookies' );
+        }
+        if($c->req->query_keywords =~ /^expired\&(.*)$/mx or $c->req->query_keywords eq 'expired') {
+            Thruk::Utils::set_message( $c, 'fail_message', 'session has expired' );
+        }
+        if($c->req->query_keywords =~ /^invalid\&(.*)$/mx or $c->req->query_keywords eq 'invalid') {
+            Thruk::Utils::set_message( $c, 'fail_message', 'session is not valid (anymore)' );
+        }
+        if($c->req->query_keywords =~ /^problem\&(.*)$/mx or $c->req->query_keywords eq 'problem') {
+            Thruk::Utils::set_message( $c, 'fail_message', 'technical problem during login, please have a look at the logfiles.' );
+        }
     }
 
     my $login   = $c->request->parameters->{'login'}    || '';
@@ -91,16 +97,28 @@ sub index :Path :Args(0) :MyAction('AddDefaults') {
             value   => '',
             expires => '-1M',
             path    => $cookie_path,
+            domain  => ($c->config->{'cookie_auth_domain'} ? $c->config->{'cookie_auth_domain'} : ''),
         };
         if(!defined $testcookie or !$testcookie->value) {
             return $c->response->redirect($c->stash->{'url_prefix'}."thruk/cgi-bin/login.cgi?nocookie");
         } else {
+            $c->stats->profile(begin => "login::external_authentication");
             my $success = Thruk::Utils::CookieAuth::external_authentication($c->config, $login, $pass, $c->req->{'address'});
-            if($success) {
+            $c->stats->profile(end => "login::external_authentication");
+            if($success eq '-1') {
+                return $c->response->redirect($c->stash->{'url_prefix'}."thruk/cgi-bin/login.cgi?problem&".$referer);
+            }
+            elsif($success) {
                 $c->res->cookies->{'thruk_auth'} = {
-                    value => $success,
-                    path  => $cookie_path,
+                    value   => $success,
+                    path    => $cookie_path,
+                    domain  => ($c->config->{'cookie_auth_domain'} ? $c->config->{'cookie_auth_domain'} : ''),
                 };
+                # call a script hook after successful login?
+                if($c->config->{'cookie_auth_login_hook'}) {
+                    my $cookie_hook = 'REMOTE_USER="'.$login.'" '.$c->config->{'cookie_auth_login_hook'}.' >/dev/null 2>&1 &';
+                    `$cookie_hook`;
+                }
                 return $c->response->redirect($referer);
             } else {
                 $c->log->info("login failed for $login on $referer");
@@ -119,7 +137,10 @@ sub index :Path :Args(0) :MyAction('AddDefaults') {
     $c->res->cookies->{'thruk_test'} = {
         value   => '****',
         path    => $cookie_path,
+        domain  => ($c->config->{'cookie_auth_domain'} ? $c->config->{'cookie_auth_domain'} : ''),
     };
+
+    $c->stats->profile(end => "login::index");
 
     return 1;
 }

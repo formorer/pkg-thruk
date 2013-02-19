@@ -28,6 +28,10 @@ before 'execute' => sub {
     add_defaults(0, @_);
 };
 
+after 'execute' => sub {
+    after_execute(@_);
+};
+
 
 ########################################
 
@@ -121,12 +125,14 @@ sub add_defaults {
         last unless $@;
         $c->log->debug("retry $x, data source error: $@");
         last if $x == $retrys;
+        # reset failed states, otherwise retry would be useless
+        $c->{'db'}->reset_failed_backends();
         sleep 1;
     }
     if($@) {
         # side.html and some other pages should not be redirect to the error page on backend errors
-        return if $safe;
         _set_possible_backends($c, $disabled_backends);
+        return if $safe;
         $c->log->error("data source error: $@");
         return $c->detach('/error/index/9');
     }
@@ -146,10 +152,8 @@ sub add_defaults {
     _set_possible_backends($c, $disabled_backends);
 
     ###############################
-    if(!defined $c->stash->{'pi_detail'} and _any_backend_enabled($c)) {
-        $c->log->error("got no result from any backend, please check backend connection and logfiles");
-        return $c->detach('/error/index/9');
-    }
+    die_when_no_backends($c);
+
     $c->stats->profile(end => "AddDefaults::get_proc_info");
 
     ###############################
@@ -159,7 +163,7 @@ sub add_defaults {
     ###############################
     # do we have only shinken backends?
     unless(exists $c->config->{'enable_shinken_features'}) {
-        if(defined $c->stash->{'pi_detail'} and ref $c->stash->{'pi_detail'} eq 'HASH') {
+        if(defined $c->stash->{'pi_detail'} and ref $c->stash->{'pi_detail'} eq 'HASH' and scalar keys %{$c->stash->{'pi_detail'}} > 0) {
             $c->stash->{'enable_shinken_features'} = 1;
             for my $b (values %{$c->stash->{'pi_detail'}}) {
                 next unless defined $b->{'peer_key'};
@@ -204,7 +208,7 @@ sub add_defaults {
        and $c->check_user_roles("authorized_for_system_commands")
       ) {
         # get backends with object config
-        for my $peer (@{$c->{'db'}->get_peers()}) {
+        for my $peer (@{$c->{'db'}->get_peers(1)}) {
             if(scalar keys %{$peer->{'configtool'}} > 0) {
                 $c->stash->{'show_config_edit_buttons'} = $c->config->{'show_config_edit_buttons'};
                 $c->stash->{'backends_with_obj_config'}->{$peer->{'key'}} = 1;
@@ -227,12 +231,44 @@ sub add_defaults {
     }
 
     ###############################
+    # user / group specific config?
+    if($c->stash->{'remote_user'}) {
+        $c->stash->{'config_adjustments'} = {};
+        for my $group (sort keys %{$c->cache->get($c->stash->{'remote_user'})->{'contactgroups'}}) {
+            if(defined $c->config->{'Group'}->{$group}) {
+                for my $key (keys %{$c->config->{'Group'}->{$group}}) {
+                    $c->stash->{'config_adjustments'}->{$key} = $c->config->{$key} unless defined $c->stash->{'config_adjustments'}->{$key};
+                    $c->config->{$key} = $c->config->{'Group'}->{$group}->{$key};
+                }
+            }
+        }
+        if(defined $c->config->{'User'}->{$c->stash->{'remote_user'}}) {
+            for my $key (keys %{$c->config->{'User'}->{$c->stash->{'remote_user'}}}) {
+                $c->stash->{'config_adjustments'}->{$key} = $c->config->{$key} unless defined $c->stash->{'config_adjustments'}->{$key};
+                $c->config->{$key} = $c->config->{'User'}->{$c->stash->{'remote_user'}}->{$key};
+            }
+        }
+
+        # reapply config defaults and config conversions
+        if(scalar keys %{$c->stash->{'config_adjustments'}} > 0) {
+            Thruk::Config::set_default_config($c->config);
+        }
+    }
+
+    ###############################
     $c->stats->profile(end => "AddDefaults::add_defaults");
     return;
 }
 
 ########################################
-after 'execute' => sub {
+
+=head2 after_execute
+
+    last chance to change stash
+
+=cut
+
+sub after_execute {
     my ( $self, $controller, $c, $test ) = @_;
 
     $c->stats->profile(begin => "AddDefaults::after");
@@ -243,7 +279,8 @@ after 'execute' => sub {
     $c->stash->{'refresh_rate'} = $c->{'request'}->{'parameters'}->{'refresh'} if defined $c->{'request'}->{'parameters'}->{'refresh'};
 
     $c->stats->profile(end => "AddDefaults::after");
-};
+    return;
+}
 
 
 
@@ -251,7 +288,7 @@ after 'execute' => sub {
 
 =head2 _set_possible_backends
 
-  _set_possible_backends()
+  _set_possible_backends($c, $disabled_backends)
 
   possible values are:
     0 = reachable
@@ -269,7 +306,11 @@ after 'execute' => sub {
 sub _set_possible_backends {
     my ($c,$disabled_backends) = @_;
 
-    my @possible_backends = @{$c->{'db'}->peer_key()};
+    my @possible_backends;
+    for my $b (@{$c->{'db'}->get_peers($c->stash->{'config_backends_only'} || 0)}) {
+        push @possible_backends, $b->{'key'};
+    }
+
     my %backend_detail;
     my @new_possible_backends;
 
@@ -290,6 +331,7 @@ sub _set_possible_backends {
             if(ref $c->stash->{'pi_detail'} eq 'HASH' and defined $c->stash->{'pi_detail'}->{$back}->{'program_start'}) {
                 $backend_detail{$back}->{'running'} = 1;
             }
+            $backend_detail{$back}->{'has_curl'} = $peer->{'class'}->{'has_curl'} || 0;
             # set combined state
             $backend_detail{$back}->{'state'} = 1; # down
             if($backend_detail{$back}->{'running'}) { $backend_detail{$back}->{'state'} = 0; }       # up
@@ -339,7 +381,10 @@ sub _disable_backends_by_group {
 sub _any_backend_enabled {
     my ($c) = @_;
     for my $peer_key (keys %{$c->stash->{'backend_detail'}}) {
-        return 1 if $c->stash->{'backend_detail'}->{$peer_key}->{'disabled'} == 0;
+        return 1 if(
+             $c->stash->{'backend_detail'}->{$peer_key}->{'disabled'} == 0
+          or $c->stash->{'backend_detail'}->{$peer_key}->{'disabled'} == 5);
+
     }
     return;
 }
@@ -348,8 +393,9 @@ sub _any_backend_enabled {
 sub _set_processinfo {
     my($c, $cache, $cached_data) = @_;
     my $last_program_restart     = 0;
-    my $processinfo              = $c->{'db'}->get_processinfo($cache);
-    return unless defined $processinfo;
+    my $processinfo              = $c->{'db'}->get_processinfo();
+    $processinfo                 = {} unless defined $processinfo;
+    $processinfo                 = {} if(ref $processinfo eq 'ARRAY' && scalar @{$processinfo} == 0);
     my $overall_processinfo      = Thruk::Utils::calculate_overall_processinfo($processinfo);
     $c->stash->{'pi'}            = $overall_processinfo;
     $c->stash->{'pi_detail'}     = $processinfo;
@@ -368,7 +414,7 @@ sub _set_processinfo {
        or $cached_data->{'prev_last_program_restart'} < $last_program_restart
       ) {
         if(defined $c->stash->{'remote_user'}) {
-            my $contactgroups = $c->{'db'}->get_contactgroups_by_contact($c, $c->stash->{'remote_user'});
+            my $contactgroups = $c->{'db'}->get_contactgroups_by_contact($c, $c->stash->{'remote_user'}, 1);
 
             $cached_data = {
                 'prev_last_program_restart' => $last_program_restart,
@@ -416,8 +462,14 @@ sub _set_enabled_backends {
         for my $peer (@{$c->{'db'}->get_peers()}) {
             $disabled_backends->{$peer->{'key'}} = 2; # set all hidden
         }
-        for my $b (split(/,/mx, $backends)) {
-            $disabled_backends->{$b} = 0;
+        if(ref $backends eq '') {
+            @{$backends} = split(/\s*,\s*/mx, $backends);
+        }
+        for my $b (@{$backends}) {
+            # peer key can be name too
+            my $peer = $c->{'db'}->get_peer_by_key($b);
+            die("got no peer for: ".$b) unless defined $peer;
+            $disabled_backends->{$peer->peer_key()} = 0;
         }
     }
     ###############################
@@ -489,6 +541,23 @@ sub _set_enabled_backends {
     $c->log->debug('disabled_backends: '.Dumper($disabled_backends));
     return($disabled_backends, $has_groups);
 }
+
+########################################
+
+=head2 die_when_no_backends
+
+    die unless there are any backeds defined and enabled
+
+=cut
+sub die_when_no_backends {
+    my($c) = @_;
+    if(!defined $c->stash->{'pi_detail'} and _any_backend_enabled($c)) {
+        $c->log->error("got no result from any backend, please check backend connection and logfiles");
+        return $c->detach('/error/index/9');
+    }
+    return;
+}
+
 
 ########################################
 __PACKAGE__->meta->make_immutable;

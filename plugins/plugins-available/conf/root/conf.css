@@ -5,18 +5,26 @@ body.config TABLE.conftoolobj INPUT[type=text] {
   width: 400px;
 }
 body.config TABLE.conftoolobj TEXTAREA {
+/*
   white-space: nowrap;
   word-wrap: normal;
+*/
+  white-space: pre-wrap; /* needed for IE8 */
   width: 100%;
 }
 body.config TABLE.conftoolobj INPUT#id_check_command_1 {
-  width: 160px;
+  width: 375px;
 }
 body.config TABLE.conftoolobj INPUT#id_check_command_2 {
-  width: 170px;
+  width: 400px;
 }
 body.config TABLE.conftoolobj INPUT[type=text].attrkey {
   width: 170px;
+}
+BODY.bare_tree {
+  background-color: white;
+  margin-top: 34px;
+  border: none;
 }
 
 /* input fields with wizards */
@@ -59,6 +67,7 @@ UL.obj_browse LI {
   text-align: left;
   clear: both;
   display: inline-block;
+  width: 420px;
 }
 
 UL.obj_browse LI:hover {
@@ -74,15 +83,15 @@ DIV.obj_browse_name {
   width: 250px;
   white-space: nowrap;
   overflow: hidden;
-  display:inline-block;
   max-width: 50%;
+  float: left;
 }
 
 DIV.obj_browse_date {
   width: 120px;
   text-align: right;
-  display:inline-block;
   max-width: 50%;
+  float: left;
 }
 INPUT.obj_browse_box {
   float: left;
@@ -127,10 +136,144 @@ body.config TABLE.filter {
 }
 
 TABLE.confPanel {
-  min-width: 200px;
+  min-width: 210px;
 }
 
 TD.plugin_description {
     width: 170px;
     white-space: normal;
+}
+
+/* object browser */
+/* icons layout */
+DIV.layout_icons.browser_file_item:hover {
+  background-color:#FFF8CC;
+}
+DIV.layout_icons.browser_file_item {
+  height: 65px;
+  width: 100px;
+  float: left;
+  margin: 5px;
+  z-index: 10;
+  -moz-user-select: none;
+  position: relative;
+}
+DIV.layout_icons.browser_file_item IMG {
+  -moz-user-select: none;
+  margin-left: 27px;
+}
+DIV.layout_icons DIV.browser_file_shorttitle {
+  white-space: nowrap;
+  -moz-user-select: none;
+  position: absolute;
+  bottom: 0px;
+  width: 100%;
+  height: 18px;
+  text-align: center;
+  overflow: visible;
+}
+DIV.layout_icons DIV.browser_file_longtitle {
+  display: none;
+}
+DIV.layout_icons DIV.browser_file_type {
+  display: none;
+}
+DIV.layout_icons DIV.browser_file_template {
+  display: none;
+}
+DIV.layout_icons DIV.browser_file_filename {
+  display: none;
+}
+DIV.layout_icons DIV.browser_file_linenr {
+  display: none;
+}
+DIV.layout_icons DIV.browser_file_comments {
+  display: none;
+}
+DIV.layout_icons.browser_file_menu {
+  display: none;
+}
+
+/* table layout */
+DIV.layout_table.browser_file_menu {
+  font-weight: bold;
+  height: 20px;
+  width: 880px;
+}
+DIV.layout_table.browser_file_item {
+  margin-top: 2px;
+  -moz-user-select: none;
+  height: 20px;
+  width: 880px;
+  overflow: hidden;
+}
+DIV.layout_table.browser_file_item:hover {
+  background-color:#FFF8CC;
+}
+DIV.layout_table.browser_file_item IMG {
+  width: 18px;
+  height: 18px;
+  float: left;
+  clear: both;
+}
+DIV.layout_table DIV.browser_file_image {
+  width: 18px;
+  float: left;
+  clear: both;
+}
+DIV.layout_table DIV.browser_file_shorttitle {
+  display: none;
+}
+DIV.layout_table DIV.browser_file_longtitle {
+  width: 250px;
+  height: 20px;
+  float: left;
+  margin-left: 5px;
+  overflow: hidden;
+}
+DIV.layout_table DIV.browser_file_type {
+  width: 75px;
+  height: 20px;
+  overflow: hidden;
+  float: left;
+}
+DIV.layout_table DIV.browser_file_template {
+  width: 70px;
+  height: 20px;
+  float: left;
+  text-align: center;
+}
+DIV.layout_table DIV.browser_file_filename {
+  width: 290px;
+  height: 20px;
+  overflow: hidden;
+  float: left;
+}
+DIV.layout_table DIV.browser_file_linenr {
+  width: 30px;
+  height: 20px;
+  overflow: hidden;
+  float: left;
+  text-align: right;
+}
+DIV.layout_table DIV.browser_file_comments {
+  margin-left: 5px;
+  width: 130px;
+  height: 20px;
+  overflow: hidden;
+  float: left;
+}
+
+/* make expanded tree not overlap */
+DIV#container > UL {
+  height: 100%;
+  overflow-x: auto;
+}
+
+/* objects should always be open */
+LI#o_objects > INS {
+  display: none;
+}
+LI#o_objects > UL {
+  margin-left: -17px;
 }

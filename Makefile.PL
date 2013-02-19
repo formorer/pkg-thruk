@@ -19,13 +19,14 @@ requires 'Config::Any'                            => 0;     # required by Thruk:
 requires 'Class::Data::Inheritable'               => 0;     # required by Catalyst::Plugin::Thruk::RemoveNastyCharsFromHttpParam
 requires 'MRO::Compat'                            => 0;     # required by Catalyst::Plugin::Unicode::Encoding
 requires 'LWP::UserAgent'                         => 0;     # required by Thruk::Utils::CLI
+requires 'Net::HTTP'                              => 6.02;  # required for HTTP connections. Version required due to timeout bug
 requires 'Class::C3::Adopt::NEXT'                 => 0;     # required by Catalyst::View::GD
 requires 'Class::C3::XS'                          => 0;     # speed up class things
 requires 'URI::Escape'                            => 0;     # required by Thruk::Controller::Root
 requires 'Moose'                                  => 0;     # required by Thruk::Action::AddDefaults
 requires 'Monitoring::Livestatus'                 => 0.74;
 requires 'Monitoring::Livestatus::Class'          => 0.03;
-requires 'Monitoring::Availability'               => 0.36;  # required by Thruk::Controller::avail
+requires 'Monitoring::Availability'               => 0.40;  # required by Thruk::Controller::avail
 requires 'GD'                                     => 2.44;  # required by Thruk::Utils::Trends
 requires 'Template'                               => 0;     # required by Thruk
 requires 'Template::Plugin::Date'                 => 0;     # required by Thruk::Utils
@@ -101,11 +102,24 @@ feature     ('plugin_reports',
   'Graphics::Color::RGB'                          => 0,
 );
 
+# reporting2 plugin
+feature     ('plugin_reports2',
+  -default                                        => 0,
+  'MIME::Lite'                                    => 0,
+  'Class::Inspector'                              => 0,
+);
+# reporting2 plugin
+feature     ('curl_support',
+  -default                                        => 0,
+  'LWP::Protocol::Net::Curl'                      => 0,     # required by Thruk::Backend::Provider::HTTP
+);
+
 # requirements test requirements
 feature     ('author_test',
   -default                                                                  => 0,
   'Catalyst::Devel'                                                         => 0,
   'Catalyst::Plugin::StackTrace'                                            => 0,
+  'CatalystX::LeakChecker'                                                  => 0,
   'HTML::Lint'                                                              => 0,
   'File::BOM'                                                               => 0,
   'Test::Cmd'                                                               => 0,
@@ -129,18 +143,20 @@ eval {
 # check plugin test symlinks
 my $testlinks = {};
 mkdir("t/xt") unless -d "t/xt";
-for my $testdir (glob('plugins/plugins-enabled/*/t')) {
-    $testdir =~ m|/plugins-enabled/(.*)/t|gmx or die("test directory $testdir does not have valid format!");
+for my $testdir (glob('plugins/plugins-available/*/t')) {
+    $testdir =~ m|/plugins-available/(.*)/t|gmx or die("test directory $testdir does not have valid format!");
     my $plugin = $1;
 
     if(!-e 't/xt/'.$plugin and !-l 't/xt/'.$plugin) {
-        symlink('../../plugins/plugins-enabled/'.$plugin.'/t', 't/xt/'.$plugin) or die("cannot create symlink ('../../plugins/plugins-enabled/$plugin/t', 't/xt/$plugin'): $!");
-        $testlinks->{$plugin} = '../../plugins/plugins-enabled/'.$plugin.'/t';
+        symlink('../../plugins/plugins-available/'.$plugin.'/t', 't/xt/'.$plugin) or die("cannot create symlink ('../../plugins/plugins-available/$plugin/t', 't/xt/$plugin'): $!");
+        $testlinks->{$plugin} = '../../plugins/plugins-available/'.$plugin.'/t';
         next;
     }
     my $target = readlink('t/xt/'.$plugin);
-    if($target ne '../../plugins/plugins-enabled/'.$plugin.'/t') {
-        die('t/xt/'.$plugin.' has wrong target: '.$target.' vs. ../../plugins/plugins-enabled/'.$plugin.'/t');
+    if(    $target ne '../../plugins/plugins-available/'.$plugin.'/t'
+       and $target ne '../../plugins/plugins-enabled/'.$plugin.'/t'
+      ) {
+        die('t/xt/'.$plugin.' has wrong target: '.$target.' vs. ../../plugins/plugins-available/'.$plugin.'/t');
     }
     $testlinks->{$plugin} = $target;
 }
@@ -218,7 +234,15 @@ close($fh);
 print "patched Makefile\n";
 
 # create combined javascript/css files
-print `./script/thruk_create_combined_static_content.pl`;
-print "created cached js/css files\n";
+eval {
+  require Config::General;
+};
+if ($@) {
+  print "*NOT* creating cached js/css files, missing modules\n";
+}
+else {
+  print `./script/thruk_create_combined_static_content.pl`;
+  print "created cached js/css files\n";
+}
 
 print "finished\n";

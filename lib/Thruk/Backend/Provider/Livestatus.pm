@@ -27,14 +27,13 @@ create new manager
 
 =cut
 sub new {
-    my( $class, $peer_config, $config, $log ) = @_;
+    my( $class, $peer_config, $config ) = @_;
 
     die("need at least one peer. Minimal options are <options>peer = /path/to/your/socket</options>\ngot: ".Dumper($peer_config)) unless defined $peer_config->{'peer'};
 
     my $self = {
         'live'   => Monitoring::Livestatus::Class->new($peer_config),
         'config' => $config,
-        'log'    => $log,
         'stash'  => undef,
     };
     bless $self, $class;
@@ -120,8 +119,6 @@ return the process info
 =cut
 sub get_processinfo {
     my $self  = shift;
-    my $cache = shift;
-
     my $data  =  $self->{'live'}
                   ->table('status')
                   ->columns(qw/
@@ -134,16 +131,6 @@ sub get_processinfo {
                   ->options({AddPeer => 1, rename => { 'livestatus_version' => 'data_source_version' }})
                   ->hashref_pk('peer_key');
 
-    # do the livestatus version check
-    if(defined $cache) {
-        my $cached_already_warned_about_livestatus_version = $cache->get('already_warned_about_livestatus_version');
-        if(!defined $cached_already_warned_about_livestatus_version and defined $self->{'config'}->{'min_livestatus_version'}) {
-            unless(Thruk::Utils::version_compare($data->{$self->peer_key()}->{'data_source_version'}, $self->{'config'}->{'min_livestatus_version'})) {
-                $cache->set('already_warned_about_livestatus_version', 1);
-                $self->{'log'}->warn("backend '".$self->peer_name()."' uses too old livestatus version: '".$data->{$self->peer_key()}->{'data_source_version'}."', minimum requirement is at least '".$self->{'config'}->{'min_livestatus_version'}."'. Upgrade if you experience problems.");
-            }
-        }
-    }
     $data->{$self->peer_key()}->{'data_source_version'} = "Livestatus ".$data->{$self->peer_key()}->{'data_source_version'};
 
     $self->{'last_program_start'} = $data->{$self->peer_key()}->{'program_start'};
@@ -159,8 +146,7 @@ returns if this user is allowed to submit commands
 
 =cut
 sub get_can_submit_commands {
-    my $self = shift;
-    my $user = shift;
+    my($self, $user) = @_;
     confess("no user") unless defined $user;
     my $data = $self->{'live'}
                  ->table('contacts')
@@ -218,13 +204,15 @@ returns a list of hosts
 sub get_hosts {
     my($self, %options) = @_;
 
+    $self->_replace_callbacks($options{'options'}->{'callbacks'});
+
     # try to reduce the amount of transfered data
     my($size, $limit);
-    if(defined $options{'pager'} and $options{'pager'}->stash->{'use_paging'}) {
+    if(defined $options{'pager'}) {
         ($size, $limit) = $self->_get_query_size('hosts', \%options, 'name', 'name');
         if(defined $size) {
             # then set the limit for the real query
-            $options{'options'}->{'limit'} = $limit + 50;
+            $options{'options'}->{'limit'} = $limit + 1;
         }
     }
 
@@ -247,9 +235,8 @@ sub get_hosts {
             last_time_down last_time_unreachable last_time_up display_name
             in_check_period in_notification_period
         /];
-
         if($self->{'stash'}->{'enable_shinken_features'}) {
-            push @{$options{'columns'}},  qw/is_impact source_problems impacts criticity is_problem
+            push @{$options{'columns'}},  qw/is_impact source_problems impacts criticity is_problem realm poller_tag
                                              got_business_rule parent_dependencies/;
         }
         if(defined $options{'extra_columns'}) {
@@ -280,7 +267,7 @@ sub get_hosts_by_servicequery {
     my($self, %options) = @_;
 
     $options{'columns'} = [qw/
-        host_has_been_checked host_name host_state host_scheduled_downtime_depth host_acknowledged
+        host_has_been_checked host_name host_state host_scheduled_downtime_depth host_acknowledged has_been_checked state
         /];
 
     my $data = $self->_get_table('services', \%options);
@@ -364,11 +351,11 @@ sub get_services {
 
     # try to reduce the amount of transfered data
     my($size, $limit);
-    if(defined $options{'pager'} and $options{'pager'}->stash->{'use_paging'}) {
+    if(defined $options{'pager'}) {
         ($size, $limit) = $self->_get_query_size('services', \%options, 'description', 'host_name', 'description');
         if(defined $size) {
             # then set the limit for the real query
-            $options{'options'}->{'limit'} = $limit + 50;
+            $options{'options'}->{'limit'} = $limit + 1;
         }
     }
 
@@ -394,11 +381,11 @@ sub get_services {
             state state_type modified_attributes_list
             last_time_critical last_time_ok last_time_unknown last_time_warning
             display_name host_display_name host_custom_variable_names host_custom_variable_values
-            in_check_period in_notification_period
+            in_check_period in_notification_period host_parents
         /];
 
         if($self->{'stash'}->{'enable_shinken_features'}) {
-            push @{$options{'columns'}},  qw/is_impact source_problems impacts criticity is_problem
+            push @{$options{'columns'}},  qw/is_impact source_problems impacts criticity is_problem poller_tag
                                              got_business_rule parent_dependencies/;
         }
         if(defined $options{'extra_columns'}) {
@@ -545,8 +532,7 @@ returns logfile entries
 sub get_logs {
     my($self, %options) = @_;
     if(defined $self->{'logcache'} and !defined $options{'nocache'}) {
-        $options{'filter'} = [] unless defined $options{'filter'};
-        push @{$options{'filter'}}, {peer_key => $self->peer_key()};
+        $options{'collection'} = 'logs_'.$self->peer_key();
         return $self->{'logcache'}->get_logs(%options);
     }
     $options{'columns'} = [qw/
@@ -658,41 +644,6 @@ sub get_contact_names {
         confess("get_contact_names() should not be called in scalar context");
     }
     return($keys, 'uniq');
-}
-
-##########################################################
-
-=head2 get_scheduling_queue
-
-  get_scheduling_queue
-
-returns the scheduling queue
-
-=cut
-sub get_scheduling_queue {
-    my($self, %options) = @_;
-    my($services) = $self->get_services(filter => [Thruk::Utils::Auth::get_auth_filter($options{'c'}, 'services'),
-                                                 { '-or' => [{ 'active_checks_enabled' => '1' },
-                                                            { 'check_options' => { '!=' => '0' }}]
-                                                 }
-                                                 ]
-                                      );
-    my($hosts)    = $self->get_hosts(filter => [Thruk::Utils::Auth::get_auth_filter($options{'c'}, 'hosts'),
-                                              { '-or' => [{ 'active_checks_enabled' => '1' },
-                                                         { 'check_options' => { '!=' => '0' }}]
-                                              }
-                                              ],
-                                    options => { rename => { 'name' => 'host_name' }, callbacks => { 'description' => sub { return ''; } } }
-                                    );
-
-    my $queue = [];
-    if(defined $services) {
-        push @{$queue}, @{$services};
-    }
-    if(defined $hosts) {
-        push @{$queue}, @{$hosts};
-    }
-    return $queue;
 }
 
 ##########################################################
@@ -1004,6 +955,9 @@ sub _get_table {
 
     my $class = $self->_get_class($table, $options);
     my $data  = $class->hashref_array() || [];
+    # prevents memory leak in Monitoring::Livestatus::Class
+    delete $class->{filter_obj};
+    delete $class->{stats_obj};
     return $data;
 }
 
@@ -1057,29 +1011,30 @@ sub _get_query_size {
         return if defined $sortby1 and $options->{'sort'}->{'ASC'} ne $sortby1;
     }
 
-    my $c = $options->{'pager'};
-    my $entries = $c->{'request'}->{'parameters'}->{'entries'} || $c->stash->{'default_page_size'};
+    my $entries = $options->{'pager'}->{'entries'};
+    return unless defined $entries;
     return if $entries !~ m/^\d+$/mx;
 
     my $stats = [
         'total' => { -isa => [ $key => { '!=' => undef } ]},
     ];
+    my $oldcolumns = delete $options->{'columns'};
     my $class = $self->_get_class($table, $options);
     my $rows = $class->stats($stats)->hashref_array();
+    $options->{'columns'} = $oldcolumns if $oldcolumns;
     my $size = $rows->[0]->{'total'};
     return unless defined $size;
 
     my $pages = 0;
-    my $page  = $c->{'request'}->{'parameters'}->{'page'} || 1;
+    my $page  = $options->{'pager'}->{'page'};
     if( $entries > 0 ) {
         $pages = POSIX::ceil( $size / $entries );
     }
-    if( exists $c->{'request'}->{'parameters'}->{'next'} )         { $page++; }
-    elsif ( exists $c->{'request'}->{'parameters'}->{'previous'} ) { $page--; }
-    elsif ( exists $c->{'request'}->{'parameters'}->{'first'} )    { $page = 1; }
-    elsif ( exists $c->{'request'}->{'parameters'}->{'last'} )     { $page = $pages; }
+    if( $options->{'pager'}->{'next'} )         { $page++; }
+    elsif ( $options->{'pager'}->{'previous'} ) { $page--; }
+    elsif ( $options->{'pager'}->{'first'} )    { $page = 1; }
+    elsif ( $options->{'pager'}->{'last'} )     { $page = $pages; }
     if( $page < 0 ) { $page = 1; }
-
     unless(wantarray) {
         confess("_get_query_size() should not be called in scalar context");
     }
@@ -1103,7 +1058,7 @@ sub _get_logs_start_end {
                                 'end'   => { -isa => [ -max => 'time' ]}
                              ])
                       ->hashref_array();
-    return($rows->[0]->{'start'}, $rows->[0]->{'end'});
+    return([$rows->[0]->{'start'}, $rows->[0]->{'end'}]);
 }
 
 ##########################################################
@@ -1121,7 +1076,20 @@ sub renew_logcache {
     # renew cache?
     if(!defined $self->{'lastcacheupdate'} or $self->{'lastcacheupdate'} < time()-5) {
         $self->{'lastcacheupdate'} = time();
-        $self->{'logcache'}->_import_logs($c, 'update');
+        $self->{'logcache'}->_import_logs($c, 'update', 0, $self->peer_key());
+    }
+    return;
+}
+
+##########################################################
+sub _replace_callbacks {
+    my($self,$callbacks) = @_;
+    return unless defined $callbacks;
+    for my $key (keys %{$callbacks}) {
+        next if ref $callbacks->{$key} eq 'CODE';
+        my $callback = $Thruk::Backend::Manager::callbacks->{$callbacks->{$key}};
+        confess("no callback for ".$key." -> ".$callbacks->{$key}) unless defined $callback;
+        $callbacks->{$key} = $callback;
     }
     return;
 }

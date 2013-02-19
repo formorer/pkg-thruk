@@ -5,22 +5,52 @@ use Thruk::Utils;
 use Thruk::Config;
 use base 'Catalyst::Plugin::ConfigLoader';
 
+########################################
+
+=head2 finalize_config
+
+    adjust config items which have to be set before anything else
+
+=cut
+
 sub finalize_config {
     my($c)= @_;
     return _do_finalize_config($c->config);
 }
 
+########################################
+
+=head2 finalize
+
+    restore used specific settings from global hash
+
+=cut
+
+sub finalize {
+    my $c = shift;
+    # restore user adjusted config
+    if($c->stash->{'config_adjustments'}) {
+        for my $key (keys %{$c->stash->{'config_adjustments'}}) {
+            $c->config->{$key} = $c->stash->{'config_adjustments'}->{$key};
+        }
+    }
+    return $c->next::method(@_);
+}
+
+########################################
 sub _do_finalize_config {
     my($config) = @_;
 
     ###################################################
     # set var dir
     $config->{'var_path'} = $config->{'home'}.'/var' unless defined $config->{'var_path'};
+    $config->{'var_path'} =~ s|/$||mx;
 
     ###################################################
     # switch user when running as root
     my $var_path = $config->{'var_path'} or die("no var path!");
-    die("'".$var_path."/.' does not exist, make sure it exists and has proper user/groups/permissions") unless -d $var_path.'/.';
+    if($> != 0 and !-d ($var_path.'/.')) { CORE::mkdir($var_path); }
+    die("'".$var_path."/.' does not exist, make sure it exists and has proper user/groups/permissions") unless -d ($var_path.'/.');
     my ($uid, $groups) = Thruk::Utils::get_user($var_path);
     $ENV{'THRUK_USER_ID'}  = $uid;
     $ENV{'THRUK_GROUP_ID'} = $groups->[0];
@@ -33,7 +63,8 @@ sub _do_finalize_config {
 
     ###################################################
     # get installed plugins
-    my $plugin_dir = $config->{'plugin_path'} || $config->{home}."/plugins";
+    $config->{'plugin_path'} = $config->{home}.'/plugins' unless defined $config->{'plugin_path'};
+    my $plugin_dir = $config->{'plugin_path'};
     $plugin_dir = $plugin_dir.'/plugins-enabled/*/';
 
     print STDERR "using plugins: ".$plugin_dir."\n" if $ENV{'THRUK_PLUGIN_DEBUG'};
@@ -102,6 +133,7 @@ sub _do_finalize_config {
     ###################################################
     # use uid to make tmp dir more uniq
     $config->{'tmp_path'} = '/tmp/thruk_'.$> unless defined $config->{'tmp_path'};
+    $config->{'tmp_path'} =~ s|/$||mx;
     $config->{'View::TT'}->{'COMPILE_DIR'} = $config->{'tmp_path'}.'/ttc_'.$>;
 
     $config->{'ssi_path'} = $config->{'ssi_path'} || $config->{home}.'/ssi';
@@ -111,6 +143,7 @@ sub _do_finalize_config {
 
     return;
 }
+
 
 1;
 

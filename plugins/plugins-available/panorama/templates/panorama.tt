@@ -1,12 +1,15 @@
-[% USE date %]
+﻿[% USE date %]
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
   <head>
     <script type="text/javascript">
     <!--
-    var server_time = new Date([% date.now * 1000 %]);
-    var client_time = new Date();
-    var delta_time  = client_time.getTime() - server_time.getTime();
+    var server_time    = new Date([% date.now * 1000 %]);
+    var client_time    = new Date();
+    var delta_time     = client_time.getTime() - server_time.getTime();
+    var url_prefix     = '[% url_prefix %]';
+    var perf_bar_mode  = '[% perf_bar_mode %]';
+    var thruk_debug_js = [% IF thruk_debug %]1[% ELSE %]0[% END %];
     -->
     </script>
     <title>[% title_prefix %]Thruk Panorama</title>
@@ -16,12 +19,15 @@
     <link rel='stylesheet' type='text/css' href='[% url_prefix %]thruk/plugins/panorama/panorama-[% version %].css' />
     [% IF thruk_debug %]
     <script type="text/javascript" charset="UTF-8" src="[% url_prefix %]thruk/plugins/panorama/extjs-4.1.1/ext-all-debug.js"></script>
+    <script type="text/javascript" src="[% url_prefix %]thruk/javascript/thruk-[% version %].js"></script>
     [% ELSE %]
-    <script type="text/javascript" charset="UTF-8" src="[% url_prefix %]thruk/plugins/panorama/extjs-4.1.1/ext-all.js"></script>
     <!--[IF !IE]> -->
+    <script type="text/javascript" charset="UTF-8" src="[% url_prefix %]thruk/plugins/panorama/extjs-4.1.1/ext-all.js"></script>
     <script type="text/javascript" charset="UTF-8" src="panorama.cgi?js=1&amp;_dc=[% date.now %]"></script>
+    <script type="text/javascript" src="[% url_prefix %]thruk/javascript/thruk-[% version %].js"></script>
     <!-- <![ENDIF]-->
     [% END %]
+    [% PROCESS custom_perf_bar_adjustments.tt %]
 </head>
 <body onunload="TP.unload()">
 [% IF thruk_debug %]
@@ -33,7 +39,7 @@
 [% END %]
 <!--[IF IE]>Thruks Panorama View does not support Internet Explorer.<![ENDIF]-->
 [%+ FOREACH i = preload_img %]
-<img src="[% url_prefix %]thruk/plugins/panorama/images/[% i %]" alt="preloader" height=0 width=0>
+<img src="[% url_prefix %]thruk/plugins/panorama/images/[% i %]" alt="preloader" height=1 width=1 style="position: absolute; top: -1px;">
 [%+ END %]
 </body>
 </html>

@@ -48,14 +48,12 @@ sub begin : Private {
                   priorities show_modified_attributes downtime_duration expire_ack_duration
                   show_backends_in_table host_action_icon service_action_icon cookie_path
                   use_feature_trends show_error_reports skip_js_errors perf_bar_mode
+                  bug_email_rcpt home_link first_day_of_week sitepanel
                 /) {
         $c->stash->{$key} = $c->config->{$key};
     }
 
-    # username?
-    if($c->user_exists) {
-        $c->stash->{'remote_user'}  = $c->user->get('username');
-    }
+    # user data
     $c->stash->{'user_data'} = { bookmarks => {} };
 
     # frame options
@@ -95,12 +93,16 @@ sub begin : Private {
     $theme = $c->config->{'default_theme'} unless defined $available_themes->{$theme};
     $c->stash->{'theme'} = $theme;
     if( defined $c->config->{templates_paths} ) {
-        $c->stash->{additional_template_paths} = [ @{ $c->config->{templates_paths} }, $c->config->{themes_path}.'/themes-enabled/'.$theme.'/templates' ];
+        # themes have to override plugins templates
+        $c->stash->{additional_template_paths} = [ $c->config->{themes_path}.'/themes-enabled/'.$theme.'/templates', @{ $c->config->{templates_paths} } ];
     }
     else {
         $c->stash->{additional_template_paths} = [ $c->config->{themes_path}.'/themes-enabled/'.$theme.'/templates' ];
     }
-    $c->stash->{all_in_one_css} = 1 if $theme eq 'Thruk';
+    $c->stash->{all_in_one_css} = 0;
+    if($theme eq 'Thruk') {
+        $c->stash->{all_in_one_css} = 1;
+    }
 
     if(exists $c->{'request'}->{'parameters'}->{'noheader'}) {
         $c->{'request'}->{'parameters'}->{'hidetop'}  = 1;
@@ -110,22 +112,18 @@ sub begin : Private {
     # minmal custom monitor screen
     $c->stash->{minimal}               = $c->{'request'}->{'parameters'}->{'minimal'} || '';
     $c->stash->{show_nav_button}       = 0 if $c->stash->{minimal};
-    $c->stash->{hide_backends_chooser} = 1 if $c->stash->{minimal};
 
     # initialize our backends
     unless ( defined $c->{'db'} ) {
         $c->{'db'} = $c->model('Thruk');
         if( defined $c->{'db'} ) {
             $c->{'db'}->init(
-                'stats'               => $c->stats,
-                'log'                 => $c->log,
-                'config'              => $c->config,
-                'backend_debug'       => $c->config->{'backend_debug'},
+                'backend_debug' => $c->config->{'backend_debug'},
             );
         }
     }
     # needed for the autoload methods
-    $Thruk::Backend::Manager::stats = $c->stats;
+    $Thruk::Backend::Manager::c     = $c;
 
     # menu cookie set?
     my $menu_states = {};
@@ -492,7 +490,8 @@ sub thruk_docs : Regex('thruk\/docs\/') :MyAction('AddDefaults') {
     $c->stash->{'no_auto_reload'}        = 1;
     $c->stash->{'hide_backends_chooser'} = 1;
     $c->stash->{'template'}              = 'docs.tt';
-    $c->stash->{page}                    = 'splashpage';
+    $c->stash->{'extrabodyclass'}        = 'docs';
+    $c->stash->{'page'}                  = 'splashpage';
 
     return 1;
 }
@@ -692,6 +691,20 @@ sub job_cgi : Regex('thruk\/cgi\-bin\/job.cgi') :MyAction('AddSafeDefaults') {
     return if defined $c->{'canceled'};
 
     return Thruk::Utils::External::job_page($c);
+}
+
+######################################
+
+=head2 test_cgi
+
+page: /thruk/cgi-bin/test.cgi
+
+=cut
+
+sub test_cgi : Regex('thruk\/cgi\-bin\/test\.cgi') {
+    my( $self, $c ) = @_;
+    return if defined $c->{'canceled'};
+    return $c->detach('/test/index');
 }
 
 ######################################

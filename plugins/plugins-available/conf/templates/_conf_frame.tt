@@ -1,4 +1,4 @@
-[% PROCESS _header.tt overlib = 1 css = "thruk/plugins/conf/conf.css" js="thruk/plugins/conf/conf.js" %]
+﻿[% PROCESS _header.tt overlib=1 css=["thruk/plugins/conf/conf.css","thruk/plugins/conf/linedtextarea/jquery-linedtextarea.css"] js=["thruk/plugins/conf/conf.js", "thruk/plugins/conf/jstree/jstree.min.js"] %]
 [% PROCESS _message.tt %]
 [% PROCESS _overdiv.tt %]
 
@@ -41,27 +41,34 @@
               </tr>
             </table>
           </form>
-
+          [% IF last_changed || needs_commit %]
+          <br>
+          <table border="0" class="optBox" style="position: absolute; right: 3px;">
+            <tr>
+              <td>
+                [% button('conf.cgi?sub=objects&amp;apply=yes&amp;save_and_reload=yes', 'save &amp; reload', 'conf_save_reload_button') %]
+              </td>
+            </tr>
+          </table>
+          [% END %]
           [% PROCESS _help.tt topic = "conf" %]
         </td>
       </tr>
     </table>
 
-    <div align="center" class='dataTitle'>[% subtitle %]</div>
-    <br>
-
+    [% IF action != "tree" %]
+    <div align="center" class='dataTitle' style="padding-top: 4px; padding-bottom: 4px;">[% subtitle %]</div>
+    [% END %]
     [% content %]
 
-[% IF action != "editor" %]
+[% IF action != "editor" && action != "tree" %]
 <br><br>
 [% END %]
 
 
 <script type="text/javascript">
 <!--
-jQuery('INPUT.conf_button').button();
-jQuery('BUTTON.conf_button').button();
-jQuery('.radioset').buttonset();
+init_conf_tool_buttons();
 -->
 </script>
 

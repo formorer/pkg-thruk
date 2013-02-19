@@ -30,11 +30,7 @@
       [% IF enable_shinken_features +%]
       var priorities              = new Array('[% FOREACH prio = priorities.keys.sort.reverse %][% priorities.$prio %][% UNLESS loop.last %]', '[% END %][% END %]');
       [% END +%]
-      [% IF thruk_debug +%]
-      var thruk_debug_js          = 1;
-      [% ELSE %]
-      var thruk_debug_js          = 0;
-      [% END +%]
+      var thruk_debug_js          = [% IF thruk_debug %]1[% ELSE %]0[% END %];
 
       [% IF original_url %]
       var original_url = '[% original_url %]';
@@ -60,11 +56,12 @@
     [% IF extra_header %][% extra_header %][% END %]
   </head>
 
-  <body class='[% page %]' id='[% page %]' onLoad="bodyOnLoad([% IF refresh_rate %][% refresh_rate %][% END %])">
+  <body class='[% page %][% IF extrabodyclass +%] [%+ extrabodyclass %][% END %]' id='[% page %]' onLoad="bodyOnLoad([% IF refresh_rate %][% refresh_rate %][% END %])">
   [% ssi_header %]
   <div style="display:none;" id="search-results"></div>
 
   <div class="pref_pane" id="pref_pane" style="display:none;">
+    <div>
     <a href="#" onclick="toggleElement('pref_pane'); return false;"><img src="[% url_prefix %]thruk/themes/[% theme %]/images/icon_minimize.gif" class="pref_pane_button" border="0" alt="preferences" width="13" height="12"></a>
     <form action="" method="GET">
     <table class="pref_pane" border=1 width="470">
@@ -72,8 +69,12 @@
         <td>
           <table width="450">
             <tr>
+              <th colspan=2 align="center" style="border-bottom: 1px dotted grey">User Settings</th>
+            </tr>
+            <tr>
               <th width="100">Theme:</th>
               <td>
+                <img src="[% url_prefix %]thruk/themes/[% theme %]/images/page_white_picture.png" alt="change theme" width=16 height=16 style="vertical-align:top;">
                 <select name="theme" id="pref_theme">
                   [% FOR t = themes %]
                   <option value="[% t %]"[% IF t == theme %] selected[% END %]>[% t %]</option>
@@ -124,13 +125,14 @@
               <th>Report:</th>
               <td>
                 <img src="[% url_prefix %]thruk/themes/[% theme %]/images/email_attach.png" alt="configure e-mail report" width=16 height=16 style="vertical-align:top;">
-                <input type="button" name="submit" value="Create E-Mail Report for this Page" onClick="window.location='reports.cgi?action=edit&amp;report=new&amp;template=report_from_url.tt&amp;params.url=[% short_uri(c).replace('&amp;', '&') | uri %]'; return false;">
+                <input type="button" name="submit" value="Create E-Mail Report for this Page" onClick="window.location='[% c.config.use_feature_reports %]?action=edit&amp;report=new&amp;template=report_from_url.tt&amp;params.url=[% IF original_url %][% original_url.replace('^http.*cgi\-bin\/', '').replace('&amp;', '&') | uri %][% ELSE %][% short_uri(c).replace('&amp;', '&') | uri %][% END %]'; return false;">
               </td>
             </tr>
           [% END %]
             <tr>
               <th>Page Refresh:</th>
               <td nowrap>
+              <img src="[% url_prefix %]thruk/themes/[% theme %]/images/arrow_refresh.png" alt="refresh page" width=16 height=16 style="vertical-align:top;">
               [% IF refresh_rate %]
               <span id="refresh_rate">Update in [% refresh_rate %] seconds <input type="button" value="stop" onClick="stopRefresh()"></span>
               [% ELSE %]
@@ -143,6 +145,8 @@
       </tr>
     </table>
     </form>
+  </div>
+  <div class="pref_pane_shadow shadow"></div>
   </div>
   [% IF use_frames %]
       [% IF reload_nav %]
@@ -168,49 +172,23 @@
   [% END %]
 
 <!-- Produced by Thruk (http://www.thruk.org). Copyright (c) 2010-2012 Thruk Developer Team. Copyright (c) 2009 Nagios Core Development Team and Community Contributors. Copyright (c) 1999-2009 Ethan Galstad. -->
+[% UNLESS minimal %]
 <table border="0" cellpadding=0 cellspacing=0 class="top_nav">
   <tr>
-    <td width="100%">
-      <table border=0 cellpadding=0 cellspacing=0>
-        <tr>
-          <td>
-          [% IF hide_backends_chooser == 0 && backends && backends.size > 1 %]
-          [% FOREACH pd IN backends %]
-          <div class='backend'>
-            [% SET name  = 'unknown'                                         %]
-            [% SET name = backend_detail.$pd.name IF backend_detail.$pd.name %]
-
-            [% SET class = 'button_peerDOWN'                                    %]
-            [% SET class = 'button_peerUP'  IF backend_detail.$pd.running       %]
-            [% SET class = 'button_peerDIS' IF backend_detail.$pd.disabled == 2 %][%# hidden by user #%]
-            [% SET class = 'button_peerHID' IF backend_detail.$pd.disabled == 3 %][%# hidden by backend param #%]
-            [% SET class = 'button_peerHID' IF param_backend && pd != param_backend %]
-            [% SET class = 'button_peerDIS' IF backend_detail.$pd.disabled == 6 %]
-            [% SET class = 'button_peerUP'  IF backend_detail.$pd.disabled == 7 %]
-            <input type="button" id='button_[% pd %]' class="[% class %]" value="[% name %]" title="[% IF backend_detail.$pd.last_error %][% escape_js(backend_detail.$pd.last_error) %][% ELSE %][% name %][% END %]" onMouseOver="button_over(this)" onMouseOut="button_out(this)" onClick="toggleBackend('[% pd %]')"[% IF backend_detail.$pd.disabled == 5 %] disabled[% END %]>
-          </div>
-          [% END %]
-          [% END %]
-          </td>
-        </tr>
-      </table>
-    </td>
+    <td width="100%" valign="top">[% PROCESS _header_site_panel.tt %]</td>
     <td class="hidden noprint" id="bug_report">
       [% IF show_error_reports%]
-      <a href="#" id="bug_report-btnEl"><img src="[% url_prefix %]thruk/themes/[% theme %]/images/bug_error.png" class="top_bug_button noprint" alt="Send Bug Report" title="Send Bug Report"></a>
+      <a href="#" id="bug_report-btnEl"><img src="[% url_prefix %]thruk/themes/[% theme %]/images/bug_error.png" class="top_bug_button noprint" alt="Send Bug Report" title="Send Bug Report" width="16" height="16"></a>
       [% END %]
     </td>
-    [% UNLESS minimal %]
     <td>
       <input type="image" src="[% url_prefix %]thruk/themes/[% theme %]/images/arrow_refresh.png" class="top_refresh_button noprint" onClick="refresh_button(this)" alt="refresh this page" title="refresh this page">
     </td>
     <td class="top_nav_pref">
       <input type="button" class="top_nav_pref_button noprint" value="preferences" title="preferences" onMouseOver="button_over(this)" onMouseOut="button_out(this)" onClick="toggleElement('pref_pane'); return false;">
     </td>
-    [% END %]
   </tr>
 </table>
-[% UNLESS minimal %]
 [% IF show_top_pane %]
 <a href="#" onClick="toggleTopPane(); return false;"><img src="[% url_prefix %]thruk/themes/[% theme %]/images/icon_minimize.gif" class="btn_toggle_top_pane" id="btn_toggle_top_pane" alt="toggle header"></a>
 [% END %]

@@ -16,14 +16,17 @@ sub prepare_uploads {
     my $enc = $c->encoding;
 
     for my $key ( keys %{ $c->request->{'parameters'} } ) {
+        next if $key eq 'data';
         next if $key eq 'referer';
         next if $key eq 'selected_hosts';
         next if $key eq 'selected_services';
         next if $key eq 'service';
         next if $key eq 'pattern';
+        next if $key eq 'exclude_pattern';
         next if $key eq 'conf_comment';
         next if $key eq 'content';
         next if $key eq 'filter';
+        next if $key eq 'performance_data';
         next if $key =~ /^s\d+_op/mx;
         next if $key =~ /^s\d+_value/mx;
         next if $key =~ /^\w{3}_s\d+_value/mx;

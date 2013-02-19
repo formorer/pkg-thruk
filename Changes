@@ -1,5 +1,116 @@
 This file documents the revision history for the Monitoring Webinterface Thruk.
 
+1.64     Fri Feb 15 22:50:55 CET 2013
+          - added user & group specific config overrides
+          - added json export for availability data
+          - added noexternalforks parameter to skip forks
+          - added show_host_attempts config option
+          - added ssl_verify_hostnames config option
+          - added show_full_commandline_source config option
+          - added check all switch to site panel
+          - make colums selectable for json requests
+          - use user sort for show_custom_vars
+          - reports
+            - added locales support (en, de, it, es, fr)
+            - fixed url reports containing icon images
+          - config tool
+            - added one click save & reload button
+          - logcache
+            - added new command logcacheclean to remove old log entries
+          - Bug Fixes
+            - fixed js error in conf tool
+            - fixed removal of deprecated plugins on rpm update
+            - fixed memory leak in livestatus accessor
+
+1.62     Sun Jan  6 21:20:16 CET 2013
+          - added filter to comments / downtimes page
+          - added json / excel export to comments / downtimes page
+          - moved plugins config items in component sections of config
+          - changed first day of week to monday, can be reverted by setting first_day_of_week=0
+          - reworked configuration documentation
+          - new reporting module
+            - put both reports edit steps into one page
+            - select multiple hosts/services/groups seperated by comma
+            - changed report templates to html
+            - changed to flot graphing library
+            - changed to wkhtml2pdf as pdf generator
+            - changed default initial state to unspecified
+            - added timeperiod support in sla reports
+            - added html preview of pdf reports
+            - added new report option for sla decimal points and graph min sla
+            - added pnp graph to reports
+          - Bug Fixes
+            - fixed problem when using logfilecache in combination with connection pool
+
+1.60.2   Wed Dec 19 11:23:28 CET 2012
+          - Bug Fixes
+            - hide site panel with only one backend
+
+1.60     Tue Dec 18 18:26:47 CET 2012
+          - added http backend type which connects to another thruk instance
+          - made sitepanel configurable
+          - config tool:
+            - changed source editor to linedtextarea because of IE compatibility
+          - logcache:
+            - renamed logcache cli commands
+            - changed mongodb logcache to seperate collection per backend
+            - added cli command logcachestats to display logcache statistics
+            - added cli command logcacheauthupdate to update authorization information
+            - fixed mongodb logcache authorization
+          - Bug Fixes
+            - fixed connection test for new backends
+            - retain order of backends when not using sections
+            - fixed deselecting unavailable backends
+            - fixed jumping cursor in search input in IE
+
+1.58     Wed Nov 21 12:51:29 CET 2012
+          - use regex matching in search preview too
+          - added new config option first_day_of_week
+          - added column filter in configuration page (Thibault Cohen)
+          - faster and more useably mouseover in host/service lists
+          - added configuration only backends
+          - show link to hostdetails when no services match
+          - added filter by number of services
+          - added config option to select default quick command
+          - added excel export for problems page
+          - added json export for problems page
+          - config tool:
+            - preserve inline comments if possible
+            - added enable/disable actions
+            - show forward references on ref page too
+            - fix computed config display of additive inheritance
+            - fix ignoring changes to readonly pattern in config
+            - fix auto submit when pressing some wizards
+          - Bug Fixes
+            - fixed sending commands to all backends
+            - usability improvements for Internet Explorer
+            - fixed renewing contactgroups cache after backend reload
+
+1.56     Wed Nov  7 22:14:06 CET 2012
+          - added naglint tool to beautify nagios config files
+          - added sites panel when grouping backends by section
+          - show perf bar for percentages too
+          - reports:
+            - replace links in html reports
+            - fixed creating e-mail reports for availability pages
+            - fixed sending first e-mail attachment always as report.pdf
+          - config tool:
+            - added object browser
+            - show warning when saving objects without a name
+            - recognize disabled (commented) objects
+          - Bug Fixes
+            - fixed limit to groups in alert summary
+
+1.54     Mon Oct 22 15:08:26 CEST 2012
+          - added support for setting custum variables without _ now
+          - added link to all services with same name on extinfo 2 page
+          - panorama view:
+            - added performance bar to host/service list
+          - Bug Fixes
+            - undefined ARG macros will be replaced with empty string
+            - fixed perf bars in IE
+            - fixed perf bars growing over maximum
+
 1.52     Tue Oct  9 16:44:04 CEST 2012
           - added cookie based authentication and logout button
           - added performance bar to host/service list

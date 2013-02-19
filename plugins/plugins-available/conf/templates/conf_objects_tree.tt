@@ -1,0 +1,153 @@
+﻿[% WRAPPER _conf_frame.tt %]
+
+<div class="dataTitle" style="padding-top: 4px; padding-bottom: 4px;">
+  <a href="conf.cgi?sub=objects" style="float:left;"><img src='[% url_prefix %]thruk/themes/[% theme %]/images/arrow_left.png' border="0" alt='go back' title='go back' width="16" height="16" style="vertical-align: middle;"> back</a>
+  Objects Browser
+</div>
+
+<table style="background: white; table-layout: fixed;" border=1 id="treetable" width="100%">
+  <tr>
+    <td valign="top" style="text-align: left; width: 200px;">
+      <div style="width: 200px; height: 34px; background: white; border-bottom: 1px solid grey;">
+        <div id="tool_set">
+          <input type="radio" name="expand" id="tool_collapse"><label for="tool_collapse">C</label>
+          <input type="radio" name="expand" id="tool_expand"><label for="tool_expand">E</label>
+        </div>
+      </div>
+      <div id="container">
+      <ul>
+        <li id="o_objects" class="jstree-open">
+          <a href="conf.cgi?sub=objects&amp;action=tree_objects" target="content_frame">Objects</a>
+          <ul>
+            <li id="o_commands">
+              <a href="conf.cgi?sub=objects&amp;action=tree_objects&amp;type=command" target="content_frame">Commands</a>
+              <ul>
+                <li id="o_commands_checks"><a href="conf.cgi?sub=objects&amp;action=tree_objects&amp;type=command&amp;origin=check" target="content_frame">Checks</a></li>
+                <li id="o_commands_eventhandler"><a href="conf.cgi?sub=objects&amp;action=tree_objects&amp;type=command&amp;origin=eventhandler" target="content_frame">Eventhandler</a></li>
+                <li id="o_commands_notifications"><a href="conf.cgi?sub=objects&amp;action=tree_objects&amp;type=command&amp;origin=notification" target="content_frame">Notifications</a></li>
+              </ul>
+            </li>
+            <li id="o_contacts">
+              <a href="conf.cgi?sub=objects&amp;action=tree_objects&amp;type=contact" target="content_frame">Contacts</a>
+              [% PROCESS child childs=contacttemplates type="contact" %]
+            </li>
+            <li id="o_contactgroups"><a href="conf.cgi?sub=objects&amp;action=tree_objects&amp;type=contactgroup" target="content_frame">Contactgroups</a></li>
+            <li id="o_hosts">
+              <a href="conf.cgi?sub=objects&amp;action=tree_objects&amp;type=host" target="content_frame">Hosts</a>
+              [% BLOCK child %]
+                [% IF childs.size > 0 %]
+                <ul>
+                [% FOREACH tname = childs.keys.sort %]
+                  [% t = childs.$tname %]
+                  <li>
+                    <a href="conf.cgi?sub=objects&amp;action=tree_objects&amp;type=[% type %]&amp;template=[% tname %]" target="content_frame">[% tname %]</a>
+                    [% IF t.exists('child_templates') %][% INCLUDE child childs=t.child_templates %][% END %]
+                  </li>
+                [% END %]
+                </ul>
+                [% END %]
+              [% END %]
+              [% PROCESS child childs=hosttemplates type="host" %]
+            </li>
+            <li id="o_hostgroups"><a href="conf.cgi?sub=objects&amp;action=tree_objects&amp;type=hostgroup" target="content_frame">Hostgroups</a></li>
+            <li id="o_services">
+              <a href="conf.cgi?sub=objects&amp;action=tree_objects&amp;type=service" target="content_frame">Services</a>
+              [% PROCESS child childs=servicetemplates type="service" %]
+            </li>
+            <li id="o_servicegroups"><a href="conf.cgi?sub=objects&amp;action=tree_objects&amp;type=servicegroup" target="content_frame">Servicegroups</a></li>
+            <li id="o_timeperiods"><a href="conf.cgi?sub=objects&amp;action=tree_objects&amp;type=timeperiod" target="content_frame">Timeperiods</a></li>
+          </ul>
+        </li>
+      </ul>
+      </div>
+    </td>
+    <td valign="top" style="border-left: 1px solid grey;">
+      <iframe name="content_frame" src="conf.cgi?sub=objects&amp;action=tree_objects" style="border: 0;" frameborder=0 id="content_frame"></iframe>
+    </td>
+  </tr>
+</table>
+
+<script type="text/javascript">
+<!--
+
+jQuery(function($) {
+
+    // adjust size of iframe and tree browser
+    var treetable = document.getElementById('treetable');
+    var w = treetable.offsetWidth, h = jQuery(window).height() - treetable.offsetTop;
+    treetable.style.width  = (w-10) + 'px';
+    treetable.style.height = (h-10) + 'px';
+
+    var cont_iframe = document.getElementById('content_frame');
+    cont_iframe.style.width  = (w-220) + 'px';
+    cont_iframe.style.height = (h-20)  + 'px';
+
+    var container = document.getElementById('container');
+    container.style.width  = 200 + 'px';
+    container.style.height = (h-55)  + 'px';
+
+    jQuery("#tool_set").buttonset();
+    jQuery('#tool_collapse').button({
+        icons: {primary: 'ui-appsidelist-button'},
+        text: false,
+        label: 'collapse all folder'
+    }).click(function() {
+        jQuery('#container').jstree('close_all');
+        jQuery('#container').jstree('open_node', '#o_objects');
+        return;
+    });
+    jQuery('#tool_expand').button({
+        icons: {primary: 'ui-appsidetree-button'},
+        text: false,
+        label: 'expand all folder'
+    }).click(function() {
+        jQuery('#container').jstree('open_all');
+        return;
+    });
+
+  jQuery('#container').jstree({
+    plugins: [ "themes", "dnd"/*, "contextmenu"*/ ],
+    core:    {
+      animation: 0
+    },
+    themes: {
+      theme: 'classic',
+      dots: true
+    },
+    dnd: {
+      drag_target: '.jstree-draggable',
+        "drop_finish" : function () {
+          alert("DROP");
+        },
+        "drag_check" : function (data) {
+          if(data.r.attr("id") == "phtml_1") {
+            return false;
+          }
+          return {
+            after : false,
+            before : false,
+            inside : true
+          };
+        },
+        "drag_finish" : function (data) {
+          alert("DRAG OK");
+      }
+    }/*,
+    contextmenu: {
+      select_node: true,
+      items: {
+        "rename" : {
+          "label"             : "Rename",
+          "action"            : function (obj) { this.rename(obj); },
+          "icon"              : false
+        }
+      }
+    }*/
+  });
+});
+
+-->
+</script>
+
+[% type="" %]
+[% END %]

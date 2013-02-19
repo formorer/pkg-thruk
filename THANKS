@@ -11,7 +11,7 @@ Danijel Tasov
 Jörg Linge
 Chris Buben
 Alex Peeters
-Vincent Besancon
+Vincent Besançon
 Jelle Smet
 Matthias Flacke
 Jean Gabes
@@ -25,6 +25,10 @@ Pierre Mavro
 Mark Wilkinson
 Jason Lempka
 Oliver Falk
+Thibault Cohen
+Davide Cecchetto
+Dene Tariko
+Olivier Li-Kiang-Cheong
 
 
 
@@ -59,6 +63,8 @@ http://findicons.com/
 Alarm Sound
 http://www.freeaudioclips.com
 
+Config Plugin File/Folder Icons based on
+http://www.veryicon.com/icons/file-type/longhorn-objects/
 
 
 JAVASCRIPT:
@@ -90,8 +96,17 @@ https://github.com/azicchetti/jquerymobile-router
 ExplorerCanvas
 http://excanvas.sourceforge.net/
 
-Ace Editor
-http://ace.ajax.org/
-
 JS Date Time Format Library
 http://blog.stevenlevithan.com/archives/date-time-format
+
+JS Tree
+http://www.jstree.com/
+
+JQuery linedtextarea
+http://alan.blog-city.com/jquerylinedtextarea.htm
+
+JS strftime
+http://hacks.bluesmoon.info/strftime
+
+JS Flot Graphs
+http://www.flotcharts.org

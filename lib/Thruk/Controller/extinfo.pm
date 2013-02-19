@@ -86,11 +86,60 @@ sub index : Path : Args(0) : MyAction('AddDefaults') {
 ##########################################################
 
 ##########################################################
-# create the downtimes page
+# create the comments page
 sub _process_comments_page {
     my( $self, $c ) = @_;
-    $c->stash->{'hostcomments'}    = $c->{'db'}->get_comments( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'comments' ), { 'service_description' => undef } ] );
-    $c->stash->{'servicecomments'} = $c->{'db'}->get_comments( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'comments' ), { 'service_description' => { '!=' => undef } } ] );
+    my $view_mode = $c->{'request'}->{'parameters'}->{'view_mode'} || 'html';
+
+    # services
+    my $svc_sorttype   = $c->{'request'}->{'parameters'}->{'sorttype_svc'}   || 1;
+    my $svc_sortoption = $c->{'request'}->{'parameters'}->{'sortoption_svc'} || 1;
+    my $svc_order      = "ASC";
+    $svc_order = "DESC" if $svc_sorttype == 2;
+    my $sortoptions = {
+        '1' => [ [ 'host_name',   'service_description' ], 'host name' ],
+        '2' => [ [ 'service_description' ],                'service name' ],
+        '3' => [ [ 'entry_time' ],                         'entry time' ],
+        '4' => [ [ 'author' ],                             'author' ],
+        '5' => [ [ 'comment' ],                            'comment' ],
+        '6' => [ [ 'id' ],                                 'id' ],
+        '7' => [ [ 'persistent' ],                         'persistent' ],
+        '8' => [ [ 'entry_type' ],                         'entry_type' ],
+        '9' => [ [ 'expires' ],                            'expires' ],
+    };
+    $svc_sortoption = 1 if !defined $sortoptions->{$svc_sortoption};
+    $c->stash->{'svc_orderby'}  = $sortoptions->{$svc_sortoption}->[1];
+    $c->stash->{'svc_orderdir'} = $svc_order;
+
+    # hosts
+    my $hst_sorttype   = $c->{'request'}->{'parameters'}->{'sorttype_hst'}   || 1;
+    my $hst_sortoption = $c->{'request'}->{'parameters'}->{'sortoption_hst'} || 1;
+    my $hst_order      = "ASC";
+    $hst_order = "DESC" if $hst_sorttype == 2;
+    $hst_sortoption = 1 if !defined $sortoptions->{$hst_sortoption};
+    $c->stash->{'hst_orderby'}  = $sortoptions->{$hst_sortoption}->[1];
+    $c->stash->{'hst_orderdir'} = $hst_order;
+
+    $c->stash->{'hostcomments'}    = $c->{'db'}->get_comments( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'comments' ), { 'service_description' => undef } ],
+                                                               sort   => { $hst_order => $sortoptions->{$hst_sortoption}->[0] },
+                                                              );
+    $c->stash->{'servicecomments'} = $c->{'db'}->get_comments( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'comments' ), { 'service_description' => { '!=' => undef } } ],
+                                                               sort   => { $svc_order => $sortoptions->{$svc_sortoption}->[0] },
+                                                              );
+
+    if( defined $view_mode and $view_mode eq 'xls' ) {
+        Thruk::Utils::Status::set_selected_columns($c);
+        $c->res->header( 'Content-Disposition', 'attachment; filename="comments.xls"' );
+        $c->stash->{'template'} = 'excel/comments.tt';
+        return $c->detach('View::Excel');
+    }
+    if($view_mode eq 'json') {
+        $c->stash->{'json'} = {
+            'host'    => $c->stash->{'hostcomments'},
+            'service' => $c->stash->{'servicecomments'},
+        };
+        return $c->detach('View::JSON');
+    }
     return 1;
 }
 
@@ -98,8 +147,59 @@ sub _process_comments_page {
 # create the downtimes page
 sub _process_downtimes_page {
     my( $self, $c ) = @_;
-    $c->stash->{'hostdowntimes'}    = $c->{'db'}->get_downtimes( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'downtimes' ), { 'service_description' => undef } ], sort => 'host_name' );
-    $c->stash->{'servicedowntimes'} = $c->{'db'}->get_downtimes( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'downtimes' ), { 'service_description' => { '!=' => undef } } ], sort => ['host_name', 'service_description'] );
+    my $view_mode = $c->{'request'}->{'parameters'}->{'view_mode'} || 'html';
+
+    # services
+    my $svc_sorttype   = $c->{'request'}->{'parameters'}->{'sorttype_svc'}   || 1;
+    my $svc_sortoption = $c->{'request'}->{'parameters'}->{'sortoption_svc'} || 1;
+    my $svc_order      = "ASC";
+    $svc_order = "DESC" if $svc_sorttype == 2;
+    my $sortoptions = {
+        '1' => [ [ 'host_name',   'service_description' ], 'host name' ],
+        '2' => [ [ 'service_description' ],                'service name' ],
+        '3' => [ [ 'entry_time' ],                         'entry time' ],
+        '4' => [ [ 'author' ],                             'author' ],
+        '5' => [ [ 'comment' ],                            'comment' ],
+        '6' => [ [ 'start_time' ],                         'start time' ],
+        '7' => [ [ 'end_time' ],                           'end time' ],
+        '8' => [ [ 'fixed' ],                              'type' ],
+        '9' => [ [ 'duration' ],                           'duration' ],
+        '10' =>[ [ 'id' ],                                 'id' ],
+        '11' =>[ [ 'triggered_by' ],                       'trigger id' ],
+    };
+    $svc_sortoption = 1 if !defined $sortoptions->{$svc_sortoption};
+    $c->stash->{'svc_orderby'}  = $sortoptions->{$svc_sortoption}->[1];
+    $c->stash->{'svc_orderdir'} = $svc_order;
+
+    # hosts
+    my $hst_sorttype   = $c->{'request'}->{'parameters'}->{'sorttype_hst'}   || 1;
+    my $hst_sortoption = $c->{'request'}->{'parameters'}->{'sortoption_hst'} || 1;
+    my $hst_order      = "ASC";
+    $hst_order = "DESC" if $hst_sorttype == 2;
+    $hst_sortoption = 1 if !defined $sortoptions->{$hst_sortoption};
+    $c->stash->{'hst_orderby'}  = $sortoptions->{$hst_sortoption}->[1];
+    $c->stash->{'hst_orderdir'} = $hst_order;
+
+    $c->stash->{'hostdowntimes'}    = $c->{'db'}->get_downtimes( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'downtimes' ), { 'service_description' => undef } ],
+                                                               sort   => { $hst_order => $sortoptions->{$hst_sortoption}->[0] },
+                                                              );
+    $c->stash->{'servicedowntimes'} = $c->{'db'}->get_downtimes( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'downtimes' ), { 'service_description' => { '!=' => undef } } ],
+                                                               sort   => { $svc_order => $sortoptions->{$svc_sortoption}->[0] },
+                                                              );
+
+    if( defined $view_mode and $view_mode eq 'xls' ) {
+        Thruk::Utils::Status::set_selected_columns($c);
+        $c->res->header( 'Content-Disposition', 'attachment; filename="downtimes.xls"' );
+        $c->stash->{'template'} = 'excel/downtimes.tt';
+        return $c->detach('View::Excel');
+    }
+    if($view_mode eq 'json') {
+        $c->stash->{'json'} = {
+            'host'    => $c->stash->{'hostdowntimes'},
+            'service' => $c->stash->{'servicedowntimes'},
+        };
+        return $c->detach('View::JSON');
+    }
     return 1;
 }
 
@@ -356,9 +456,16 @@ sub _process_host_page {
     if($c->{'stash'}->{'show_full_commandline'} == 2 ||
        $c->{'stash'}->{'show_full_commandline'} == 1 && $c->check_user_roles( "authorized_for_configuration_information" ) ) {
         if(defined $host) {
-            my $command            = $c->{'db'}->expand_command('host' => $host );
+            my $command            = $c->{'db'}->expand_command('host' => $host, 'source' => $c->config->{'show_full_commandline_source'} );
             $c->stash->{'command'} = $command;
         }
+    }
+
+    # object source
+    $c->stash->{'source'} = '';
+    my $custvars = Thruk::Utils::get_custom_vars($host);
+    if(defined $custvars->{'SRC'}) {
+        $c->stash->{'source'} = $custvars->{'SRC'};
     }
 
     # pnp graph?
@@ -470,9 +577,16 @@ sub _process_service_page {
         }
         $c->stash->{'command'}  = '';
         if(defined $host and defined $service) {
-            my $command            = $c->{'db'}->expand_command('host' => $host, 'service' => $service );
+            my $command            = $c->{'db'}->expand_command('host' => $host, 'service' => $service, 'source' => $c->config->{'show_full_commandline_source'} );
             $c->stash->{'command'} = $command;
         }
+    }
+
+    # object source
+    $c->stash->{'source'} = '';
+    my $custvars = Thruk::Utils::get_custom_vars($service);
+    if(defined $custvars->{'SRC'}) {
+        $c->stash->{'source'} = $custvars->{'SRC'};
     }
 
     # pnp graph?
@@ -523,7 +637,7 @@ sub _process_scheduling_page {
     };
     $sortoption = 7 if !defined $sortoptions->{$sortoption};
 
-    $c->{'db'}->get_scheduling_queue( sort => { $order => $sortoptions->{$sortoption}->[0] }, pager => $c, c => $c );
+    $c->{'db'}->get_scheduling_queue($c,  sort => { $order => $sortoptions->{$sortoption}->[0] }, pager => 1 );
 
     $c->stash->{'order'}   = $order;
     $c->stash->{'sortkey'} = $sortoptions->{$sortoption}->[1];

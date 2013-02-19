@@ -328,6 +328,8 @@ sub _task_server_stats {
         data  => [],
         group => 'cat',
     };
+    $c->stash->{'json'} = $json;
+    return $c->forward('Thruk::View::JSON') unless -e '/proc'; # all beyond is linux only
 
     my($cpu, $cpucount);
     if($show_load eq 'true' or $show_cpu eq 'true') {
@@ -373,7 +375,6 @@ sub _task_server_stats {
             { cat => 'Memory',  type => 'cached',   value => $mem->{'Cached'},    'warn' => $mem->{'MemTotal'}*0.8, crit => $mem->{'MemTotal'}*0.9, max => $mem->{'MemTotal'}, graph => '' };
     }
 
-    $c->stash->{'json'} = $json;
     return $c->forward('Thruk::View::JSON');
 }
 
@@ -435,7 +436,7 @@ sub _task_show_logs {
     }
     my $total_filter = Thruk::Utils::combine_filter('-and', $filter);
 
-    $c->{'db'}->renew_logcache($c);
+    return if $c->{'db'}->renew_logcache($c);
     my $data = $c->{'db'}->get_logs(filter => [$total_filter, Thruk::Utils::Auth::get_auth_filter($c, 'log')], sort => {'DESC' => 'time'});
 
     my $json = {
@@ -518,7 +519,7 @@ sub _task_hosts {
     $c->{'request'}->{'parameters'}->{'entries'} = $c->{'request'}->{'parameters'}->{'pageSize'};
     $c->{'request'}->{'parameters'}->{'page'}    = $c->{'request'}->{'parameters'}->{'currentPage'};
 
-    my $data = $c->{'db'}->get_hosts(filter => [ Thruk::Utils::Auth::get_auth_filter($c, 'hosts'), $hostfilter ], pager => $c);
+    my $data = $c->{'db'}->get_hosts(filter => [ Thruk::Utils::Auth::get_auth_filter($c, 'hosts'), $hostfilter ], pager => 1);
 
     my $json = {
         columns => [
@@ -530,7 +531,9 @@ sub _task_hosts {
             { 'header' => 'Attempt',                width => 60,  dataIndex => 'current_attempt',   align => 'center', renderer => 'TP.render_attempt' },
             { 'header' => 'Site',                   width => 60,  dataIndex => 'peer_name',         align => 'center', },
             { 'header' => 'Status Information',     flex  => 1,   dataIndex => 'plugin_output',                        renderer => 'TP.render_plugin_output' },
+            { 'header' => 'Performance',            width => 80,  dataIndex => 'perf_data',                            renderer => 'TP.render_perfbar' },
 
+            { 'header' => 'Parents',                  dataIndex => 'parents',                     hidden => JSON::XS::true, renderer => 'TP.render_clickable_host_list' },
             { 'header' => 'Current Attempt',          dataIndex => 'current_attempt',             hidden => JSON::XS::true },
             { 'header' => 'Max Check Attempts',       dataIndex => 'max_check_attempts',          hidden => JSON::XS::true },
             { 'header' => 'Last State Change',        dataIndex => 'last_state_change',           hidden => JSON::XS::true, renderer => 'TP.render_date' },
@@ -580,7 +583,7 @@ sub _task_services {
     $c->{'request'}->{'parameters'}->{'entries'} = $c->{'request'}->{'parameters'}->{'pageSize'};
     $c->{'request'}->{'parameters'}->{'page'}    = $c->{'request'}->{'parameters'}->{'currentPage'};
 
-    $c->{'db'}->get_services(filter => [ Thruk::Utils::Auth::get_auth_filter($c, 'services'), $servicefilter], pager => $c);
+    $c->{'db'}->get_services(filter => [ Thruk::Utils::Auth::get_auth_filter($c, 'services'), $servicefilter], pager => 1);
 
     my $json = {
         columns => [
@@ -596,6 +599,7 @@ sub _task_services {
             { 'header' => 'Attempt',                width => 60,  dataIndex => 'current_attempt',   align => 'center', renderer => 'TP.render_attempt' },
             { 'header' => 'Site',                   width => 60,  dataIndex => 'peer_name',         align => 'center', },
             { 'header' => 'Status Information',     flex  => 1,   dataIndex => 'plugin_output',                        renderer => 'TP.render_plugin_output' },
+            { 'header' => 'Performance',            width => 80,  dataIndex => 'perf_data',                            renderer => 'TP.render_perfbar' },
 
             { 'header' => 'Current Attempt',          dataIndex => 'current_attempt',             hidden => JSON::XS::true },
             { 'header' => 'Max Check Attempts',       dataIndex => 'max_check_attempts',          hidden => JSON::XS::true },
@@ -620,6 +624,7 @@ sub _task_services {
             { 'header' => 'Custom Variable Names',    dataIndex => 'custom_variable_names',       hidden => JSON::XS::true, hideable => JSON::XS::false },
             { 'header' => 'Custom Variable Values',   dataIndex => 'custom_variable_values',      hidden => JSON::XS::true, hideable => JSON::XS::false },
 
+            { 'header' => 'Host Parents',                   dataIndex => 'host_parents',                  hidden => JSON::XS::true, renderer => 'TP.render_clickable_host_list' },
             { 'header' => 'Host Status',                    dataIndex => 'host_state',                    hidden => JSON::XS::true, renderer => 'TP.render_host_status' },
             { 'header' => 'Host Notifications Enabled',     dataIndex => 'host_notifications_enabled',    hidden => JSON::XS::true, renderer => 'TP.render_enabled_switch' },
             { 'header' => 'Host Check Type',                dataIndex => 'host_check_type',               hidden => JSON::XS::true, renderer => 'TP.render_check_type' },
@@ -952,7 +957,10 @@ sub _get_gearman_stats {
         PeerAddr => $host,
         PeerPort => $port,
     )
-    or do { $c->log->warn("can't connect to port $port on $host: $!"); return $data; };
+    or do {
+        $c->log->warn("can't connect to port $port on $host: $!") unless(defined $ENV{'THRUK_SRC'} and $ENV{'THRUK_SRC'} eq 'TEST');
+        return $data;
+    };
     $handle->autoflush(1);
 
     print $handle "status\n";

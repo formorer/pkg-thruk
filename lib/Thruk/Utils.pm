@@ -315,7 +315,11 @@ sub get_start_end_for_timeperiod {
         # start on last sunday 0:00 till now
         my @today  = Today();
         my @monday = Monday_of_Week(Week_of_Year(@today));
-        $start     = Mktime(@monday,  0,0,0) - 86400;
+        if($c->config->{'first_day_of_week'} == 1) {
+            $start = Mktime(@monday,  0,0,0);
+        } else {
+            $start = Mktime(@monday,  0,0,0) - 86400;
+        }
         $end       = time();
     }
     elsif($timeperiod eq 'last7days') {
@@ -326,7 +330,11 @@ sub get_start_end_for_timeperiod {
         # start on last weeks sunday 0:00 till last weeks saturday 24:00
         my @today  = Today();
         my @monday = Monday_of_Week(Week_of_Year(@today));
-        $end       = Mktime(@monday,  0,0,0) - 86400;
+        if($c->config->{'first_day_of_week'} == 1) {
+            $end   = Mktime(@monday,  0,0,0);
+        } else {
+            $end   = Mktime(@monday,  0,0,0) - 86400;
+        }
         $start     = $end - 7*86400;
     }
     elsif($timeperiod eq 'thismonth') {
@@ -422,20 +430,17 @@ sub get_start_end_for_timeperiod_from_param {
 
 ########################################
 
-=head2 set_dynamic_roles
+=head2 get_dynamic_roles
 
-  set_dynamic_roles($c)
+  get_dynamic_roles($c, $user)
 
-sets the authorized_for_read_only role and group based roles
+gets the authorized_for_read_only role and group based roles
 
 =cut
-sub set_dynamic_roles {
-    my $c = shift;
+sub get_dynamic_roles {
+    my($c, $username, $user) = @_;
 
-    $c->stats->profile(begin => "Thruk::Utils::set_dynamic_roles");
-    my $username = $c->request->{'user'}->{'username'};
-
-    return unless defined $username;
+    $user = Catalyst::Authentication::Store::FromCGIConf->find_user( { username => $username }, $c ) unless defined $user;
 
     # is the contact allowed to send commands?
     my($can_submit_commands,$alias,$data);
@@ -458,27 +463,30 @@ sub set_dynamic_roles {
         }
     }
 
-    if(defined $alias) {
-        $c->request->{'user'}->{'alias'} = $alias;
-    }
     if(!defined $can_submit_commands) {
         $can_submit_commands = Thruk->config->{'can_submit_commands'} || 0;
     }
 
+    # set initial roles from user
+    my $roles = [];
+    for my $r (@{$user->{'roles'}}) {
+        push @{$roles}, $r;
+    }
+
     # override can_submit_commands from cgi.cfg
-    if(grep /authorized_for_all_host_commands/mx, @{$c->request->{'user'}->{'roles'}}) {
+    if(grep /authorized_for_all_host_commands/mx, @{$roles}) {
         $can_submit_commands = 1;
     }
-    elsif(grep /authorized_for_all_service_commands/mx, @{$c->request->{'user'}->{'roles'}}) {
+    elsif(grep /authorized_for_all_service_commands/mx, @{$roles}) {
         $can_submit_commands = 1;
     }
-    elsif(grep /authorized_for_system_commands/mx, @{$c->request->{'user'}->{'roles'}}) {
+    elsif(grep /authorized_for_system_commands/mx, @{$roles}) {
         $can_submit_commands = 1;
     }
 
     $c->log->debug("can_submit_commands: $can_submit_commands");
     if($can_submit_commands != 1) {
-        push @{$c->request->{'user'}->{'roles'}}, 'authorized_for_read_only';
+        push @{$roles}, 'authorized_for_read_only';
     }
 
     my $groups = $cached_data->{'contactgroups'};
@@ -494,16 +502,53 @@ sub set_dynamic_roles {
                       'authorized_contactgroup_for_system_information'        => 'authorized_for_system_information',
                       'authorized_contactgroup_for_read_only'                 => 'authorized_for_read_only',
                     };
+    my $roles_by_group = {};
     for my $key (keys %{$possible_roles}) {
         my $role = $possible_roles->{$key};
         if(defined $c->config->{'cgi_cfg'}->{$key}) {
             my %contactgroups = map { $_ => 1 } split/\s*,\s*/mx, $c->config->{'cgi_cfg'}->{$key};
             for my $contactgroup (keys %{contactgroups}) {
-                push @{$c->request->{'user'}->{'roles'}}, $role if ( defined $groups->{$contactgroup} or $contactgroup eq '*' );
+                if(defined $groups->{$contactgroup} or $contactgroup eq '*' ) {
+                    $roles_by_group->{$role} = [] unless defined $roles_by_group->{$role};
+                    push @{$roles_by_group->{$role}}, $contactgroup;
+                    push @{$roles}, $role
+                }
             }
         }
     }
 
+    # roles could be duplicated
+    $roles = array_uniq($roles);
+
+    return($roles, $can_submit_commands, $alias, $roles_by_group);
+}
+
+########################################
+
+=head2 set_dynamic_roles
+
+  set_dynamic_roles($c)
+
+sets the authorized_for_read_only role and group based roles
+
+=cut
+sub set_dynamic_roles {
+    my $c = shift;
+
+    $c->stats->profile(begin => "Thruk::Utils::set_dynamic_roles");
+    my $username = $c->request->{'user'}->{'username'};
+
+    return unless defined $username;
+
+    my($roles, $can_submit_commands, $alias) = get_dynamic_roles($c, $username, $c->request->{'user'});
+
+    if(defined $alias) {
+        $c->request->{'user'}->{'alias'} = $alias;
+    }
+
+    for my $role (@{$roles}) {
+        push @{$c->request->{'user'}->{'roles'}}, $role;
+    }
 
     $c->stats->profile(end => "Thruk::Utils::set_dynamic_roles");
     return 1;
@@ -629,6 +674,43 @@ sub read_ssi {
     }
     $c->log->warn($c->config->{'ssi_path'}."/".$file." is no longer accessible, please restart thruk to initialize ssi information");
     return "";
+}
+
+########################################
+
+=head2 read_resource_file
+
+  read_resource_file($file, [ $macros ], [$with_comments])
+
+returns a hash with all USER1-32 macros. macros can
+be a predefined hash.
+
+=cut
+
+sub read_resource_file {
+    my($file, $macros, $with_comments) = @_;
+    my $comments    = {};
+    my $lastcomment = "";
+    return unless defined $file;
+    return unless -f $file;
+    $macros   = {} unless defined $macros;
+    open(my $fh, '<', $file) or die("cannot read file ".$file.": ".$!);
+    while(my $line = <$fh>) {
+        if($line =~ m/^\s*(\$USER\d+\$)\s*=\s*(.*)$/mx) {
+            $macros->{$1}   = $2;
+            $comments->{$1} = $lastcomment;
+            $lastcomment    = "";
+        }
+        elsif($line =~ m/^(\#.*$)/mx) {
+            $lastcomment .= $1;
+        }
+        elsif($line =~ m/^\s*$/mx) {
+            $lastcomment = '';
+        }
+    }
+    Thruk::Utils::IO::close($fh, $file, 1);
+    return($macros) unless $with_comments;
+    return($macros, $comments);
 }
 
 
@@ -781,6 +863,34 @@ sub set_paging_steps {
 
 ########################################
 
+=head2 get_custom_vars
+
+  get_custom_vars($obj)
+
+return custom variables in a hash
+
+=cut
+sub get_custom_vars {
+    my $data = shift;
+
+    my $custom_vars = {};
+
+    return unless defined $data;
+    return unless defined $data->{'custom_variable_names'};
+
+    my $x = 0;
+    while(defined $data->{'custom_variable_names'}->[$x]) {
+        my $cust_name  = $data->{'custom_variable_names'}->[$x];
+        my $cust_value = $data->{'custom_variable_values'}->[$x];
+        $custom_vars->{$cust_name} = $cust_value;
+        $x++;
+    }
+    return $custom_vars;
+}
+
+
+########################################
+
 =head2 set_custom_vars
 
   set_custom_vars($c)
@@ -792,36 +902,37 @@ sub set_custom_vars {
     my $c    = shift;
     my $data = shift;
 
-    $c->stash->{'custom_vars'} = {};
+    $c->stash->{'custom_vars'} = [];
 
     return unless defined $data;
     return unless defined $data->{'custom_variable_names'};
     return unless defined $c->config->{'show_custom_vars'};
 
     my $vars = ref $c->config->{'show_custom_vars'} eq 'ARRAY' ? $c->config->{'show_custom_vars'} : [ $c->config->{'show_custom_vars'} ];
-    my $test = array2hash($vars);
 
-    my $x = 0;
-    while(defined $data->{'custom_variable_names'}->[$x]) {
-        my $cust_name  = '_'.$data->{'custom_variable_names'}->[$x];
-        my $cust_value = '_'.$data->{'custom_variable_values'}->[$x];
-        my $found      = 0;
-        if(defined $test->{$cust_name}) {
-            $found = 1;
-        } else {
-            for my $v (keys %{$test}) {
+    my $custom_vars = get_custom_vars($data);
+
+    my $already_added = {};
+    for my $test (@{$vars}) {
+        for my $cust_name (%{$custom_vars}) {
+            next if defined $already_added->{$cust_name};
+            my $cust_value = $custom_vars->{$cust_name};
+            my $found      = 0;
+            if($test eq $cust_name or $test eq '_'.$cust_name) {
+                $found = 1;
+            } else {
+                my $v = "".$test;
                 next if CORE::index($v, '*') == -1;
                 $v =~ s/\*/.*/gmx;
-                if($cust_name =~ m/^$v$/mx) {
+                if($cust_name =~ m/^$v$/mx or ('_'.$cust_name) =~ m/^$v$/mx) {
                     $found = 1;
                     last;
                 }
             }
+            if($found) {
+                push @{$c->stash->{'custom_vars'}}, [ $cust_name, $cust_value ];
+            }
         }
-        if($found) {
-            $c->stash->{'custom_vars'}->{$cust_name} = $cust_value;
-        }
-        $x++;
     }
     return;
 }
@@ -1023,6 +1134,23 @@ sub get_pnp_url {
     }
 
     return '';
+}
+
+########################################
+
+=head2 list
+
+  list($ref)
+
+return list of ref unless it is already a list
+
+=cut
+
+sub list {
+    my($d) = @_;
+    return [] unless defined $d;
+    return $d if ref $d eq 'ARRAY';
+    return([$d]);
 }
 
 ########################################
@@ -1484,7 +1612,7 @@ sub write_data_file {
 
   get_git_name()
 
-write data to datafile
+return git branch name
 
 =cut
 
@@ -1536,6 +1664,141 @@ uname:      $uname
 release:    $release
 EOT
     return $details;
+}
+
+########################################
+
+=head2 reduce_number
+
+  reduce_number($number, $unit, [$divisor])
+
+return reduced number, ex 1024B -> 1KB
+
+=cut
+
+sub reduce_number {
+    my($number, $unit, $divisor) = @_;
+    $divisor = 1000 unless defined $divisor;
+    my $unitprefix = '';
+
+    my $divs = [
+        [ 'T', 4 ],
+        [ 'G', 3 ],
+        [ 'M', 2 ],
+        [ 'K', 1 ],
+    ];
+    for my $div (@{$divs}) {
+        my $pow   = $div->[1];
+        my $limit = $divisor ** $pow;
+        if($number > $limit) {
+            $unitprefix = $div->[0];
+            $number     = $number / $limit;
+            last;
+        }
+    }
+    return($number, $unitprefix.$unit);
+}
+
+########################################
+
+=head2 get_template_variable
+
+  get_template_variable($c, $template, $variable)
+
+return variable defined from template
+
+=cut
+
+sub get_template_variable {
+    my($c, $template, $var, $stash) = @_;
+
+    # more stash variables to set?
+    $stash = {} unless defined $stash;
+    for my $key (keys %{$stash}) {
+        $c->stash->{$key} = $stash->{$key};
+    }
+
+    $c->stash->{'temp'}  = $template;
+    $c->stash->{'var'}   = $var;
+    my $data;
+    eval {
+        $data = $c->view('TT')->render($c, 'get_variable.tt');
+    };
+    if($@) {
+        Thruk::Utils::CLI::_error($@);
+        return $c->detach('/error/index/13');
+    }
+
+    my $VAR1;
+    ## no critic
+    eval($data);
+    ## use critic
+    return $VAR1;
+}
+
+########################################
+
+=head2 format_response_error
+
+  format_response_error($response)
+
+return error from response object
+
+=cut
+
+sub format_response_error {
+    my($response) = @_;
+    if(defined $response) {
+        return $response->code().': '.$response->message();
+    } else {
+        return Dumper($response);
+    }
+}
+
+########################################
+
+=head2 load_lwp_curl
+
+  load_lwp_curl()
+
+load curls lwp replacement
+
+=cut
+
+sub load_lwp_curl {
+    my($proxy) = @_;
+    return if(defined $ENV{'USE_CURL'} and $ENV{'USE_CURL'} == 0);
+    my $options = {};
+    if(defined $ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} and $ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} == 0) {
+        $options = {
+            CURLOPT_SSL_VERIFYPEER => 0,
+            CURLOPT_SSL_VERIFYHOST => 0,
+        };
+    }
+    eval {
+        require LWP::Protocol::Net::Curl;
+        LWP::Protocol::Net::Curl->import(%{$options});
+
+        if($proxy) {
+            # curl uses env proxy
+            $ENV{'HTTP_PROXY'}  = $proxy;
+            $ENV{'http_proxy'}  = $proxy;
+            $ENV{'HTTPS_PROXY'} = $proxy;
+            $ENV{'https_proxy'} = $proxy;
+        } else {
+            # remove proxy from env if load succeded
+            delete $ENV{'HTTP_PROXY'};
+            delete $ENV{'http_proxy'};
+            delete $ENV{'HTTPS_PROXY'};
+            delete $ENV{'https_proxy'};
+        }
+    };
+    if($@) {
+        $ENV{'THRUK_CURL_ERROR'} = $@;
+        return;
+    }
+
+    return 1;
 }
 
 ########################################

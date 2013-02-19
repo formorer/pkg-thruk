@@ -5,6 +5,7 @@ use warnings;
 use Carp qw/cluck/;
 use Monitoring::Config::File;
 use Data::Dumper;
+use Carp;
 
 =head1 NAME
 
@@ -23,7 +24,16 @@ Provides access to core objects like hosts, services etc...
 
 =head2 new
 
-    new($config)
+    new({
+        core_conf           => path to core config
+        obj_file            => path to core config file
+        obj_dir             => path to core config path
+        obj_resource_file   => path to resource.cfg file
+        obj_readonly        => readonly pattern
+        obj_exclude         => exclude pattern
+        localdir            => local path used for remote configs
+        relative            => allow relative paths
+    })
 
 return new objects database
 
@@ -33,7 +43,7 @@ sub new {
     my $config = shift;
 
     my $self = {
-        'config'             => $config,
+        'config'             => {},
         'errors'             => [],
         'parse_errors'       => [],
         'files'              => [],
@@ -45,7 +55,15 @@ sub new {
         'needs_index_update' => 0,
         'coretype'           => 'nagios',
         'cache'              => {},
+        'remotepeer'         => undef,
     };
+
+    $self->{'config'}->{'localdir'} =~ s/\/$//gmx if defined $self->{'config'}->{'localdir'};
+
+    for my $key (keys %{$config}) {
+        next if $key eq 'configs'; # creates circular dependency otherwise
+        $self->{'config'}->{$key} = $config->{$key};
+    }
 
     bless $self, $class;
 
@@ -63,23 +81,36 @@ initialize configs
 
 =cut
 sub init {
-    my $self   = shift;
-    my $config = shift;
-    my $stats  = shift;
-
-    $self->{'stats'} = $stats if defined $stats;
+    my($self, $config, $stats, $remotepeer) = @_;
+    delete $self->{'remotepeer'};
+    if(defined $remotepeer and lc($remotepeer->{'type'}) eq 'http') {
+        $self->{'remotepeer'} = $remotepeer;
+    }
+    $self->{'stats'}      = $stats if defined $stats;
 
     # update readonly config
-    $self->{'config'}->{'obj_readonly'} = $config->{'obj_readonly'};
+    my $readonly_changed = 0;
+    if($self->_array_diff($self->_list($self->{'config'}->{'obj_readonly'}), $self->_list($config->{'obj_readonly'}))) {
+        $self->{'config'}->{'obj_readonly'} = $config->{'obj_readonly'};
+        $readonly_changed = 1;
+
+        # update all readonly file settings
+        for my $file (@{$self->{'files'}}) {
+            $file->update_readonly_status($self->{'config'}->{'obj_readonly'});
+        }
+    }
 
     return $self unless $self->{'initialized'} == 0;
     $self->{'initialized'} = 1;
 
+    delete $self->{'config'}->{'localdir'};
     for my $key (keys %{$config}) {
+        next if $key eq 'configs'; # creates circular dependency otherwise
         $self->{'config'}->{$key} = $config->{$key};
     }
     $self->update();
     $self->{'cached'}      = 0;
+    $self->{'config'}->{'localdir'} =~ s/\/$//gmx if defined $self->{'config'}->{'localdir'};
 
     # set default excludes when defined manual paths
     if(!defined $self->{'config'}->{'obj_exclude'}
@@ -92,7 +123,25 @@ sub init {
         ];
     }
 
+    delete $self->{'remotepeer'};
+
     return $self;
+}
+
+
+##########################################################
+
+=head2 discard_changes
+
+    discard_changes()
+
+Forget all changes made so far and not yet saved to disk
+
+=cut
+sub discard_changes {
+    my($self) = @_;
+    $self->check_files_changed(1);
+    return;
 }
 
 
@@ -100,19 +149,23 @@ sub init {
 
 =head2 commit
 
-    commit()
+    commit([$c])
 
 Commit changes to disk. Returns 1 on success.
 
+$c is only needed when syncing with remote sites.
+
 =cut
 sub commit {
-    my $self = shift;
-    my $rc   = 1;
+    my($self, $c) = @_;
+    my $rc    = 1;
+    my $files = { changed => [], deleted => []};
     my $changed_files = $self->get_changed_files();
     for my $file (@{$changed_files}) {
         unless($file->save()) {
             $rc = 0;
         }
+        push @{$files->{'changed'}}, [ $file->{'display'}, "".$file->get_new_file_content(), $file->{'mtime'} ] unless $file->{'deleted'};
     }
 
     # remove deleted files from files
@@ -120,15 +173,22 @@ sub commit {
     for my $f (@{$self->{'files'}}) {
         if(!$f->{'deleted'} or -f $f->{'path'}) {
             push @new_files, $f;
+        } else {
+            push @{$files->{'deleted'}}, $f->{'display'};
         }
     }
-    $self->{'files'}        = \@new_files;
+    $self->{'files'} = \@new_files;
     if($rc == 1) {
         $self->{'needs_commit'} = 0;
         $self->{'last_changed'} = time() if scalar @{$changed_files} > 0;
     }
 
     $self->_collect_errors();
+
+    if($self->is_remote()) {
+        confess("no c") unless $c;
+        $self->remote_file_save($c, $files);
+    }
 
     return $rc;
 }
@@ -162,7 +222,7 @@ sub get_file_by_path {
     my $self = shift;
     my $path = shift;
     for my $file (@{$self->{'files'}}) {
-        return $file if $file->{'path'} eq $path;
+        return $file if($file->{'path'} eq $path or $file->{'display'} eq $path);
     }
     return;
 }
@@ -182,6 +242,9 @@ sub get_changed_files {
     my @files;
     for my $file (@{$self->{'files'}}) {
         push @files, $file if $file->{'changed'} == 1;
+    }
+    if(scalar @files == 0) {
+        $self->{'needs_commit'} = 0;
     }
     return \@files;
 }
@@ -207,19 +270,26 @@ sub get_objects {
 
 =head2 get_objects_by_type
 
-    $list = get_objects_by_type($type, [ $filter ])
+    $list = get_objects_by_type($type, [ $filter ], [ $origin])
 
 Returns list of L<Monitoring::Config::Object|Monitoring::Config::Object> objects for a type.
 
+filter is verified against the name if its a scalar value. Otherwise it has to be like
+
+ $filter = {
+    attribute => value
+ };
+
+ origin is used for commands and can be 'check', 'eventhandler' or 'notification'
+
 =cut
 sub get_objects_by_type {
-    my $self   = shift;
-    my $type   = shift;
-    my $filter = shift;
+    my($self, $type, $filter, $origin) = @_;
 
     return [] unless defined $self->{'objects'}->{'byname'}->{$type};
 
-    if(defined $filter) {
+    # scalar filter by name only
+    if(defined $filter and ref $filter eq '') {
         if(defined $self->{'objects'}->{'byname'}->{$type}->{$filter}) {
             return $self->{'objects'}->{'byname'}->{$type}->{$filter};
         }
@@ -230,7 +300,75 @@ sub get_objects_by_type {
     for my $id (@{$self->{'objects'}->{'bytype'}->{$type}}) {
         my $obj = $self->get_object_by_id($id);
         die($id) unless defined $obj;
-        push @{$objs}, $obj;
+
+        if(defined $filter and ref $filter eq 'HASH') {
+            my $ok = 1;
+            for my $attr (keys %{$filter}) {
+                if(!defined $obj->{'conf'}->{$attr}) {
+                    $ok = 0;
+                }
+                elsif(ref $obj->{'conf'}->{$attr} eq '') {
+                    $ok = 0 unless $obj->{'conf'}->{$attr} eq $filter->{$attr};
+                }
+                elsif(ref $obj->{'conf'}->{$attr} eq 'ARRAY') {
+                    my $found = 0;
+                    for my $el (@{$obj->{'conf'}->{$attr}}) {
+                        if($el eq $filter->{$attr}) {
+                            $found = 1;
+                            last;
+                        }
+                    }
+                    $ok = 0 unless $found;
+                }
+                last unless $ok;
+            }
+            push @{$objs}, $obj if $ok;
+        } else {
+            push @{$objs}, $obj;
+        }
+    }
+
+    # filter by origin?
+    if($type eq 'command' and defined $origin) {
+        my $command_list = {};
+        if($origin eq 'check') {
+            for my $otype (qw/host service/) {
+                my $os = $self->get_objects_by_type($otype);
+                for my $o (@{$os}) {
+                    next unless defined $o->{'conf'}->{'check_command'};
+                    my($cmd, $args) = split(/\!/mx, $o->{'conf'}->{'check_command'}, 2);
+                    $command_list->{$cmd} = 1;
+                }
+            }
+        }
+        if($origin eq 'notification') {
+            my $os = $self->get_objects_by_type('contact');
+            for my $o (@{$os}) {
+                if(defined $o->{'conf'}->{'host_notification_commands'}) {
+                    for my $cmd (@{$o->{'conf'}->{'host_notification_commands'}}) {
+                        $command_list->{$cmd} = 1;
+                    }
+                }
+                if(defined $o->{'conf'}->{'service_notification_commands'}) {
+                    for my $cmd (@{$o->{'conf'}->{'service_notification_commands'}}) {
+                        $command_list->{$cmd} = 1;
+                    }
+                }
+            }
+        }
+        if($origin eq 'eventhandler') {
+            for my $otype (qw/host service/) {
+                my $os = $self->get_objects_by_type($otype);
+                for my $o (@{$os}) {
+                    next unless defined $o->{'conf'}->{'event_handler'};
+                    for my $cmd (@{$o->{'conf'}->{'event_handler'}}) {
+                        $command_list->{$cmd} = 1;
+                    }
+                }
+            }
+        }
+        # reduce object list by origin filter
+        @{$objs} = grep { defined $command_list->{$_->get_primary_name()} } @{$objs};
     }
 
     return $objs;
@@ -315,8 +453,7 @@ Get templates by type. Returns list of L<Monitoring::Config::Object|Monitoring::
 
 =cut
 sub get_templates_by_type {
-    my $self   = shift;
-    my $type   = shift;
+    my($self, $type) = @_;
 
     return [] unless defined $self->{'objects'}->{'byname'}->{'templates'}->{$type};
 
@@ -361,12 +498,10 @@ Get object by location. Returns L<Monitoring::Config::Object|Monitoring::Config:
 
 =cut
 sub get_object_by_location {
-    my $self = shift;
-    my $path = shift;
-    my $line = shift;
+    my($self, $path, $line) = @_;
 
     for my $file (@{$self->{'files'}}) {
-        next unless $file->{'path'} eq $path;
+        next unless($file->{'path'} eq $path or $file->{'display'} eq $path);
         for my $obj (@{$file->{'objects'}}) {
             if(defined $obj->{'line'} and defined $obj->{'line2'}
                and $obj->{'line'} ne '' and $obj->{'line2'} ne ''
@@ -478,7 +613,7 @@ sub update {
     $self->{'needs_update'} = 0;
     $self->{'last_changed'} = 0;
 
-    $self->_reset_errors(1);
+    $self->_reset_errors();
     $self->_set_config();
     $self->_set_files();
     $self->_read_objects();
@@ -499,8 +634,6 @@ sub check_files_changed {
     my $self   = shift;
     my $reload = shift || 0;
 
-    # reset errors
-    $self->_reset_errors();
     my $errors1 = scalar @{$self->{'errors'}};
 
     $self->{'needs_update'} = 0;
@@ -521,6 +654,7 @@ sub check_files_changed {
         $self->{'needs_update'} = 0;
         $self->update();
     }
+
     return 1;
 }
 
@@ -541,13 +675,14 @@ sub update_object {
     my $comment = shift || '';
     my $rebuild = shift;
     $rebuild = 1 unless defined $rebuild;
+    if(ref $comment eq 'ARRAY') { $comment = join("\n", @{$comment}); }
 
     return unless defined $obj;
 
-    my $oldname = $obj->get_name();
+    my $oldchanged = $obj->{'file'}->{'changed'};
+    my $oldcommit  = $self->{'needs_commit'};
 
-    # reset errors
-    $self->_reset_errors();
+    my $oldname = $obj->get_name();
 
     my $file = $obj->{'file'};
 
@@ -558,8 +693,13 @@ sub update_object {
     $obj->{'conf'}          = $data;
     $obj->{'cache'}         = {};
     $obj->{'comments'}      = [ split/\n/mx, $comment ];
-    $file->{'changed'}      = 1;
-    $self->{'needs_commit'} = 1;
+
+    # unify comments
+    for my $com (@{$obj->{'comments'}}) {
+        $com =~ s/^\s+//gmx
+    }
+
+    return 0 unless(defined $file and $file->{'path'});
 
     push @{$file->{'objects'}}, $obj;
 
@@ -567,6 +707,15 @@ sub update_object {
 
     if(defined $oldname and defined $newname and $oldname ne $newname) {
         $self->rename_dependencies($obj, $oldname, $newname);
+    }
+
+    # restore old status if file hasn't changed
+    if($file->diff() eq '') {
+        $obj->{'file'}->{'changed'} = $oldchanged;
+        $self->{'needs_commit'}     = $oldcommit;
+    } else {
+        $file->{'changed'}      = 1;
+        $self->{'needs_commit'} = 1;
     }
 
     $self->_rebuild_index() if $rebuild;
@@ -635,6 +784,7 @@ sub move_object {
     $self->delete_object($obj, 1);
 
     $obj->{'line'} = 0; # put new object at the end
+    $obj->set_file($newfile);
     push @{$newfile->{'objects'}}, $obj;
 
     $self->_rebuild_index() if $rebuild;
@@ -709,6 +859,19 @@ sub file_undelete {
     return;
 }
 
+##########################################################
+
+=head2 rebuild_index
+
+    rebuild_index()
+
+rebuild object index
+
+=cut
+sub rebuild_index {
+    my($self) = @_;
+    return $self->_rebuild_index();
+}
 
 ##########################################################
 
@@ -838,10 +1001,11 @@ sub get_references {
     get_default_keys($type, [ $options ])
 
  $options = {
-     no_alias => 0,   # skip alias definitions
+     no_alias => 0,   # skip alias definitions and only return real config attributes
+     sort     => 0,   # sort by default attribute order
  }
 
-return the sorted default config keys for a type of object
+return the default config keys for a type of object
 
 =cut
 sub get_default_keys {
@@ -856,9 +1020,62 @@ sub get_default_keys {
         next if $obj->{'default'}->{$key}->{'type'} eq 'DEPRECATED';
         push @keys, $key;
     }
+
+    if($options->{'sort'}) {
+        @keys = @{Monitoring::Config::Object::Parent::get_sorted_keys(undef, \@keys)};
+    }
+
     return \@keys;
 }
 
+##########################################################
+
+=head2 get_files_for_folder
+
+    get_files_for_folder($dir, [ $regex ])
+
+return all files below this folder (matching the regex)
+
+=cut
+sub get_files_for_folder {
+    my ( $self, $dir, $match ) = @_;
+    return $self->_get_files_for_folder($dir, $match);
+}
+
+
+##########################################################
+
+=head2 get_files_root
+
+    get_files_root()
+
+return root folder for config files
+
+=cut
+sub get_files_root {
+    my ( $self ) = @_;
+
+    return $self->{'config'}->{'files_root'} if $self->{'config'}->{'files_root'};
+    my $files = [];
+    for my $file (@{$self->{'files'}}) {
+        push @{$files}, $file->{'path'};
+    }
+    my $root = Thruk::Utils::Conf::get_root_folder($files);
+    if($root ne '' and $self->is_remote()) {
+        my $localdir = $self->{'config'}->{'localdir'};
+        $root =~ s|^$localdir||mx;
+    }
+
+    # file root is empty when there are no files (yet)
+    if($root eq '') {
+        return $self->{'config'}->{'files_root'} if $self->{'config'}->{'files_root'};
+        my $dirs = Thruk::Utils::list($self->{'config'}->{'obj_dir'});
+        if(defined $dirs->[0]) {
+            $root = $dirs->[0];
+        }
+    }
+    return $root;
+}
 
 ##########################################################
 # INTERNAL SUBS
@@ -894,6 +1111,8 @@ sub _set_config {
         }
 
         $self->_update_core_conf($core_conf);
+    } else {
+        $self->{'_corefile'} = undef;
     }
 
     $self->_set_coretype();
@@ -909,7 +1128,7 @@ sub _update_core_conf {
 
     if(!defined $self->{'_coreconf'} or $self->{'_coreconf'} ne $core_conf) {
         if($core_conf) {
-            $self->{'_corefile'} = Monitoring::Config::File->new($core_conf, $self->{'config'}->{'obj_readonly'}, $self->{'coretype'});
+            $self->{'_corefile'} = Monitoring::Config::File->new($core_conf, $self->{'config'}->{'obj_readonly'}, $self->{'coretype'}, $self->{'relative'});
         } else {
             $self->{'_corefile'} = undef;
             return;
@@ -928,6 +1147,7 @@ sub _update_core_conf {
     $self->{'_corefile'}->{'conf'} = {};
     while(my $line = <$fh>) {
         chomp($line);
+        next if $line =~ m/^\s*\#/mx;
         my($key,$value) = split/\s*=\s*/mx, $line, 2;
         next unless defined $value;
         $key   =~ s/^\s*(.*?)\s*$/$1/mx;
@@ -1016,7 +1236,7 @@ sub _get_files_for_folder {
     $dir =~ s/\/$//gmxo;
 
     my @tmpfiles;
-    opendir(my $dh, $dir) or die("cannot open directory $dir: $!");
+    opendir(my $dh, $dir) or confess("cannot open directory $dir: $!");
     while(my $file = readdir $dh) {
         next if $file eq '.';
         next if $file eq '..';
@@ -1034,6 +1254,15 @@ sub _get_files_for_folder {
         if(defined $match) {
             my $test = $dir."/".$file;
             next unless $test =~ m/$match/mx;
+        }
+
+        my $localdir = $self->{'config'}->{'localdir'};
+        if($localdir) {
+            my $display = $dir.'/'.$file;
+            $display    =~ s/^$localdir\///mx;
+            my $d = $dir.'/'.$file;
+            $d    =~ s|/+|/|gmx;
+            $self->{'file_trans'}->{$d} = $display;
         }
 
         push @files, $dir."/".$file;
@@ -1058,7 +1287,9 @@ sub _get_files {
     my @files;
     my $filenames = $self->_get_files_names();
     for my $filename (@{$filenames}) {
-        my $file = Monitoring::Config::File->new($filename, $self->{'config'}->{'obj_readonly'}, $self->{'coretype'});
+        my $force = 0;
+        $force    = 1 if $self->{'config'}->{'force'} or $self->{'config'}->{'relative'};
+        my $file = Monitoring::Config::File->new($filename, $self->{'config'}->{'obj_readonly'}, $self->{'coretype'}, $force, $self->{'file_trans'}->{$filename});
         if(defined $file) {
             push @files, $file;
         } else {
@@ -1075,11 +1306,16 @@ sub _get_files_names {
     my ( $self ) = @_;
     my $files    = {};
     my $config   = $self->{'config'};
+    $self->{'file_trans'} = {};
 
     # single folders
     if(defined $config->{'obj_dir'}) {
         for my $dir ( ref $config->{'obj_dir'} eq 'ARRAY' ? @{$config->{'obj_dir'}} : ($config->{'obj_dir'}) ) {
-            for my $file (@{$self->_get_files_for_folder($dir, '\.cfg$')}) {
+            my $path = $dir;
+            $path = $self->{'config'}->{'localdir'}.'/'.$dir if $self->{'config'}->{'localdir'};
+            for my $file (@{$self->_get_files_for_folder($path, '\.cfg$')}) {
+                Thruk::Utils::Conf::decode_any($file);
+                $file =~ s|/+|/|gmx;
                 $files->{$file} = 1;
             }
         }
@@ -1101,6 +1337,13 @@ sub _get_files_names {
     # single files
     if(defined $config->{'obj_file'}) {
         for my $file ( ref $config->{'obj_file'} eq 'ARRAY' ? @{$config->{'obj_file'}} : ($config->{'obj_file'}) ) {
+            Thruk::Utils::Conf::decode_any($file);
+            if($self->{'config'}->{'localdir'}) {
+                my $display = $file;
+                $file       = $self->{'config'}->{'localdir'}.'/'.$file;
+                $file =~ s|/+|/|gmx;
+                $self->{'file_trans'}->{$file} = $display;
+            }
             $files->{$file} = 1;
         }
     }
@@ -1109,7 +1352,13 @@ sub _get_files_names {
         push @{$self->{'parse_errors'}}, "you need to configure paths (obj_dir, obj_file)";
     }
 
-    my @uniqfiles = keys %{$files};
+    my $cleanfiles = {};
+    for my $f (keys %{$files}) {
+        $f =~ s|/+|/|gmx;
+        $cleanfiles->{$f} = 1;
+    }
+
+    my @uniqfiles = keys %{$cleanfiles};
     return \@uniqfiles;
 }
 
@@ -1122,7 +1371,6 @@ sub _check_files_changed {
     my $oldfiles = {};
     my @newfiles;
     for my $file ( @{$self->{'files'}} ) {
-
         # don' report newly added files as deleted
         if($file->{'is_new_file'}) {
             push @newfiles, $file;
@@ -1137,6 +1385,7 @@ sub _check_files_changed {
                 push @newfiles, $file;
                 push @{$self->{'errors'}}, "file ".$file->{'path'}." has been deleted.";
                 $self->{'needs_index_update'} = 1;
+                next;
             }
         }
         elsif($check == 2) {
@@ -1159,7 +1408,7 @@ sub _check_files_changed {
 
     for my $file (@{$self->_get_files_names()}) {
         if(!defined $oldfiles->{$file}) {
-            push @{$self->{'files'}}, Monitoring::Config::File->new($file, $self->{'config'}->{'obj_readonly'}, $self->{'coretype'});
+            push @{$self->{'files'}}, Monitoring::Config::File->new($file, $self->{'config'}->{'obj_readonly'}, $self->{'coretype'}, undef, $self->{'file_trans'}->{$file});
             $self->{'needs_index_update'} = 1;
         }
     }
@@ -1170,20 +1419,20 @@ sub _check_files_changed {
 
 ##########################################################
 # check if file has changed
+# returns:
+#   0 if file did not change
+#   1 if file is new / created
+#   2 if md5 sum changed
 sub _check_file_changed {
     my $self = shift;
     my $file = shift;
-
-    if(!-f $file->{'path'}) {
-        cluck(Dumper($file).": $!");
-    }
 
     # mtime & inode
     my($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,
        $atime,$mtime,$ctime,$blksize,$blocks)
        = stat($file->{'path'});
 
-    if(!defined $ino) {
+    if(!defined $ino or !defined $file->{'inode'}) {
         return 1;
     }
     else {
@@ -1294,6 +1543,8 @@ sub _update_obj_in_index {
     # by id
     $objects->{'byid'}->{$obj->{'id'}} = $obj;
 
+    return 1 if $obj->{'disabled'};
+
     # by template name
     if(defined $tname) {
         my $existing_id = $objects->{'byname'}->{'templates'}->{$obj->{'type'}}->{$tname};
@@ -1365,11 +1616,9 @@ sub _update_obj_in_index {
 
 ##########################################################
 sub _reset_errors {
-    my($self,$force) = @_;
-    if($force) {
-        $self->{'errors'}           = [];
-        $self->{'parse_errors'}     = [];
-    }
+    my($self, $no_parse) = @_;
+    $self->{'errors'}       = [];
+    $self->{'parse_errors'} = [] unless $no_parse;
     return;
 }
 
@@ -1398,6 +1647,7 @@ sub _check_references {
     my @parse_errors;
     $self->_all_object_links_callback(sub {
         my($file, $obj, $attr, $link, $val) = @_;
+        return if $obj->{'disabled'};
         if($attr eq 'use') {
             if(!defined $self->{'objects'}->{'byname'}->{'templates'}->{$link}->{$val}) {
                 push @parse_errors, "referenced template '$val' does not exist in ".Thruk::Utils::Conf::_link_obj($obj);
@@ -1496,12 +1746,17 @@ sub _all_object_links_callback {
                         if(substr($ref2, 0, 1) eq '!' or substr($ref2, 0, 1) eq '+') { $ref2 = substr($ref2, 1); }
                         next if index($ref2, '*') != -1;
                         next if $ref2 eq '';
-                        &$cb($file, $obj, $key, $link, $ref2);
+                        my $args;
+                        # list of commands, like eventhandlers
+                        if($obj->{'default'}->{$key}->{'link'} eq 'command') {
+                            ($ref2,$args) = split(/!/mx, $ref2, 2);
+                        }
+                        &$cb($file, $obj, $key, $link, $ref2, $args);
                     }
                 }
                 elsif($obj->{'default'}->{$key}->{'type'} eq 'COMMAND') {
                     my($cmd,$args) = split(/!/mx, $obj->{'conf'}->{$key}, 2);
-                    &$cb($file, $obj, $key, $link, $cmd);
+                    &$cb($file, $obj, $key, $link, $cmd, $args);
                 }
             }
         }
@@ -1520,6 +1775,205 @@ sub _resolve_relative_path {
         while( $x < 10 && $file =~ s|/[^/]+/\.\./|/|gmx) { $x++ };
     }
     return $file;
+}
+
+
+##########################################################
+sub _array_diff {
+    my($self, $list1, $list2) = @_;
+    return 0 if(!defined $list1 and !defined $list2);
+    return 1 if !defined $list1;
+    return 1 if !defined $list2;
+
+    my $nr1 = scalar @{$list1} - 1;
+    my $nr2 = scalar @{$list2} - 1;
+    return 1 if $nr1 != $nr2;
+
+    for my $x (0..$nr1) {
+        next if(!defined $list1->[$x] and !defined $list2->[$x]);
+        return 1 if !defined $list1->[$x];
+        return 1 if !defined $list2->[$x];
+        return 1 if $list1->[$x] ne $list2->[$x];
+    }
+
+    return 0;
+}
+
+##########################################################
+# convert anything to a list
+sub _list {
+    $_[1] = [] unless defined $_[1];
+    if(ref $_[1] ne 'ARRAY') { $_[1] = [$_[1]]; }
+    return;
+}
+
+##########################################################
+# do something on remote site
+sub _remote_do {
+    my($self, $c, $sub, $args) = @_;
+    my $res;
+    eval {
+        $res = $self->{'remotepeer'}
+                   ->{'class'}
+                   ->_req('configtool', {
+                            auth => $c->stash->{'remote_user'},
+                            sub  => $sub,
+                            args => $args,
+                    });
+    };
+    if($@) {
+        my $msg = $@;
+        $c->log->error($@);
+        $msg    =~ s|\s+(at\s+.*?\s+line\s+\d+)||mx;
+        my @text = split(/\n/mx, $msg);
+        Thruk::Utils::set_message( $c, 'fail_message', $text[0] );
+        return;
+    } else {
+        die("bogus result: ".Dumper($res)) if(!defined $res or ref $res ne 'ARRAY' or !defined $res->[2]);
+        return $res->[2];
+    }
+}
+
+##########################################################
+# do something on remote site in background
+sub _remote_do_bg {
+    my($self, $c, $sub, $args) = @_;
+    my $res = $self->{'remotepeer'}
+                   ->{'class'}
+                   ->_req('configtool', {
+                            auth => $c->stash->{'remote_user'},
+                            sub  => $sub,
+                            args => $args,
+                            wait => 1,
+                    });
+    die("bogus result: ".Dumper($res)) if(!defined $res or ref $res ne 'ARRAY' or !defined $res->[2]);
+    return $res->[2];
+}
+
+##########################################################
+
+=head2 is_remote
+
+    is_remote()
+
+return true if this backend has a remote connection
+
+=cut
+sub is_remote {
+    my($self) = @_;
+    return 1 if defined $self->{'remotepeer'};
+    return 0;
+}
+
+##########################################################
+
+=head2 remote_file_sync
+
+    remote_file_sync()
+
+syncronize files from remote
+
+=cut
+sub remote_file_sync {
+    my($self, $c) = @_;
+    return unless $self->is_remote();
+    my $files = {};
+    for my $f (@{$self->{'files'}}) {
+        $files->{$f->{'display'}} = {
+            'mtime'        => $f->{'mtime'},
+            'md5'          => $f->{'md5'},
+        };
+    }
+    my $remotefiles = $self->_remote_do($c, 'syncfiles', { files => $files });
+    return unless $remotefiles;
+
+    my $localdir = $c->config->{'tmp_path'}."/localconfcache/".$self->{'remotepeer'}->{'key'};
+    $self->{'config'}->{'localdir'} = $localdir;
+    $self->{'config'}->{'obj_dir'}  = '/';
+    Thruk::Utils::IO::mkdir_r($localdir);
+    for my $path (keys %{$remotefiles}) {
+        my $f = $remotefiles->{$path};
+        if(defined $f->{'content'}) {
+            my $localpath = $localdir.$path;
+            $c->log->debug('updating file: '.$path);
+            my $dir       = $localpath;
+            $dir          =~ s/\/[^\/]+$//mx;
+            Thruk::Utils::IO::mkdir_r($dir);
+            Thruk::Utils::IO::write($localpath, $f->{'content'}, $f->{'mtime'});
+            $c->{'request'}->{'parameters'}->{'refresh'} = 1; # must be set to save changes to tmp obj retention
+        }
+    }
+    for my $f (@{$self->{'files'}}) {
+        $c->log->debug('checking file: '.$f->{'display'});
+        if(!defined $remotefiles->{$f->{'display'}}) {
+            $c->log->debug('deleting file: '.$f->{'display'});
+            $c->{'request'}->{'parameters'}->{'refresh'} = 1; # must be set to save changes to tmp obj retention
+            unlink($f->{'path'});
+        } else {
+            $c->log->debug('keeping file: '.$f->{'display'});
+        }
+    }
+
+    # if there are no files (yet), we need the files root
+    if(scalar @{$self->{'files'}} == 0) {
+        my $settings = $self->_remote_do($c, 'configsettings');
+        return unless $settings;
+        Thruk::Utils::IO::mkdir_r($self->{'config'}->{'localdir'}.$settings->{'files_root'});
+        $self->{'config'}->{'files_root'} = $settings->{'files_root'}.'/';
+        $self->{'config'}->{'files_root'} =~ s|/+|/|gmx;
+    }
+
+    return;
+}
+
+##########################################################
+
+=head2 remote_config_check
+
+    remote_config_check()
+
+do config check on remote site
+
+=cut
+sub remote_config_check {
+    my($self, $c) = @_;
+    return unless $self->is_remote();
+    my($rc, $output) = @{$self->_remote_do_bg($c, 'configcheck')};
+    $c->{'stash'}->{'output'} = $output;
+    return !$rc;
+}
+
+##########################################################
+
+=head2 remote_config_reload
+
+    remote_config_reload()
+
+do a config reload on remote site
+
+=cut
+sub remote_config_reload {
+    my($self, $c) = @_;
+    return unless $self->is_remote();
+    my($rc, $output) = @{$self->_remote_do_bg($c, 'configreload')};
+    $c->{'stash'}->{'output'} = $output;
+    return !$rc;
+}
+
+##########################################################
+
+=head2 remote_file_save
+
+    remote_file_save()
+
+save files to remote site
+
+=cut
+sub remote_file_save {
+    my($self, $c, $files) = @_;
+    return unless $self->is_remote();
+    my $res = $self->_remote_do($c, 'configsave', $files);
+    return;
 }
 
 ##########################################################

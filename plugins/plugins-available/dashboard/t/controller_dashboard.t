@@ -1,8 +1,16 @@
 use strict;
 use warnings;
-use Test::More tests => 81;
+use Test::More;
 
 BEGIN {
+    plan skip_all => 'backends required' if(!-s 'thruk_local.conf' and !defined $ENV{'CATALYST_SERVER'});
+    plan skip_all => 'local test only'   if defined $ENV{'CATALYST_SERVER'};
+    plan skip_all => 'test skipped'      if defined $ENV{'NO_DISABLED_PLUGINS_TEST'};
+    plan tests => 106;
+
+    # enable plugin
+    `cd plugins/plugins-enabled && ln -s ../plugins-available/dashboard .`;
+
     use lib('t');
     require TestUtils;
     import TestUtils;
@@ -43,3 +51,7 @@ for my $url (keys %{$redirects}) {
         'redirect' => 1,
     );
 }
+
+# restore default
+`cd plugins/plugins-enabled && rm -f dashboard`;
+unlink('root/thruk/plugins/dashboard');

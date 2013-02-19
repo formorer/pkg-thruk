@@ -5,11 +5,15 @@ package TestUtils;
 #########################
 # Test Utils
 #########################
+BEGIN {
+  $ENV{'THRUK_SRC'} = 'TEST';
+}
 
 use strict;
 use Data::Dumper;
 use Test::More;
 use URI::Escape;
+use Encode qw/decode_utf8/;
 use Thruk::Utils;
 use Thruk::Utils::External;
 
@@ -30,7 +34,7 @@ sub get_test_servicegroup {
     if($page =~ m/extinfo\.cgi\?type=8&amp;servicegroup=(.*?)'>(.*?)<\/a>/) {
         $group = $1;
     }
-    isnt($group, undef, "got a servicegroup from config.cgi") or BAIL_OUT('got no test servicegroup, cannot test.'.diag(Dumper($request)));
+    isnt($group, undef, "got a servicegroup from config.cgi") or bail_out_req('got no test servicegroup, cannot test.', $request);
     return($group);
 }
 
@@ -43,7 +47,7 @@ sub get_test_hostgroup {
     if($page =~ m/'extinfo\.cgi\?type=5&amp;hostgroup=(.*?)'>(.*?)<\/a>/) {
         $group = $1;
     }
-    isnt($group, undef, "got a hostgroup from config.cgi") or BAIL_OUT('got no test hostgroup, cannot test.'.diag(Dumper($request)));
+    isnt($group, undef, "got a hostgroup from config.cgi") or bail_out_req('got no test hostgroup, cannot test.', $request);
     return($group);
 }
 
@@ -56,7 +60,7 @@ sub get_test_user {
     if($page =~ m/Logged in as <i>(.*?)<\/i>/) {
         $user = $1;
     }
-    isnt($user, undef, "got a user from config.cgi") or BAIL_OUT('got no test user, cannot test.'.diag(Dumper($request)));
+    isnt($user, undef, "got a user from config.cgi") or bail_out_req('got no test user, cannot test.', $request);
     return($user);
 }
 
@@ -71,8 +75,8 @@ sub get_test_service {
         $host    = $1;
         $service = $2;
     }
-    isnt($host, undef, "got a host from status.cgi") or BAIL_OUT('got no test host, cannot test.'.diag(Dumper($request)));
-    isnt($service, undef, "got a service from status.cgi") or BAIL_OUT('got no test service, cannot test.'.diag(Dumper($request)));
+    isnt($host, undef, "got a host from status.cgi") or bail_out_req('got no test host, cannot test.', $request);
+    isnt($service, undef, "got a service from status.cgi") or bail_out_req('got no test service, cannot test.', $request);
     $service = uri_unescape($service);
     $host    = uri_unescape($host);
     return($host, $service);
@@ -87,28 +91,43 @@ sub get_test_timeperiod {
     if($page =~ m/id="timeperiod_.*?">\s*<td\ class='dataOdd'>([^<]+)<\/td>/gmx) {
         $timeperiod = $1;
     }
-    isnt($timeperiod, undef, "got a timeperiod from config.cgi") or BAIL_OUT('got no test config, cannot test.'.diag(Dumper($request)));
+    isnt($timeperiod, undef, "got a timeperiod from config.cgi") or bail_out_req('got no test config, cannot test.', $request);
     return($timeperiod);
 }
 
 #########################
+
+=head2 test_page
+
+  check a page
+
+  needs test hash
+  {
+    url             => url to test
+    follow          => follow redirects
+    fail            => request should fail
+    redirect        => request should redirect
+    location        => redirect location
+    fail_message_ok => page can contain error message without failing
+    like            => (list of) regular expressions which have to match page content
+    unlike          => (list of) regular expressions which must not match page content
+    content_type    => match this content type
+    skip_html_lint  => skip html lint check
+    sleep           => sleep this amount of seconds after the request
+    waitfor         => wait till regex occurs (max 60sec)
+  }
+
+=cut
 sub test_page {
     my(%opts) = @_;
     my $return = {};
 
+    my $start = time();
     my $opts = _set_test_page_defaults(\%opts);
 
     ok($opts->{'url'}, $opts->{'url'});
 
-    my $request = _request($opts->{'url'});
-
-    if($request->is_redirect and $request->{'_headers'}->{'location'} =~ m/\/startup\.html\?(.*)$/) {
-        diag("got startup link: ".$1);
-        # startup fcgid
-        fail("startup url does not match") if $1 ne $opts->{'url'};
-        _request('/thruk/side.html');
-        $request = _request($opts->{'url'});
-    }
+    my $request = _request($opts->{'url'}, $opts->{'startup_to_url'});
 
     if(defined $opts->{'follow'}) {
         my $redirects = 0;
@@ -118,7 +137,7 @@ sub test_page {
             $redirects++;
             last if $redirects > 10;
         }
-        ok( $redirects < 10, 'Redirect succeed after '.$redirects.' hops' ) or BAIL_OUT(Dumper($request));
+        ok( $redirects < 10, 'Redirect succeed after '.$redirects.' hops' ) or bail_out_req('too many redirects', $request);
     }
 
     if(!defined $opts->{'fail_message_ok'}) {
@@ -127,7 +146,27 @@ sub test_page {
         }
     }
 
+    # wait for something?
     $return->{'content'} = $request->content;
+    if(defined $opts->{'waitfor'}) {
+        my $now = time();
+        my $waitfor = $opts->{'waitfor'};
+        my $found   = 0;
+        while($now < $start + 60) {
+            if($return->{'content'} =~ m/$waitfor/mx) {
+                ok(1, "content ".$waitfor." found after ".($now - $start)."seconds");
+                $found = 1;
+                last;
+            }
+            sleep(1);
+            $now = time();
+            $request = _request($opts->{'url'}, $opts->{'startup_to_url'});
+            $return->{'content'} = $request->content;
+        }
+        fail("content did not occur within 60 seconds") unless $found;
+        return $return;
+    }
+
     if($request->is_redirect and $request->{'_headers'}->{'location'} =~ m/cgi\-bin\/job\.cgi\?job=(.*)$/) {
         # is it a background job page?
         wait_for_job($1);
@@ -136,7 +175,7 @@ sub test_page {
         $return->{'content'} = $request->content;
         if($request->is_error) {
             fail('Request '.$location.' should succeed');
-            BAIL_OUT(Dumper($request));
+            bail_out_req('request failed', $request);
         }
     }
     elsif(defined $opts->{'fail'}) {
@@ -160,10 +199,10 @@ sub test_page {
         $return->{'content'} = $request->content;
         if($request->is_error) {
             fail('Request '.$location.' should succeed');
-            BAIL_OUT(Dumper($request));
+            bail_out_req('request failed', $request);
         }
     } else {
-        ok( $request->is_success, 'Request '.$opts->{'url'}.' should succeed' ) or BAIL_OUT(Dumper($request));
+        ok( $request->is_success, 'Request '.$opts->{'url'}.' should succeed' ) or bail_out_req('request failed', $request);
     }
 
     # text that should appear
@@ -222,8 +261,9 @@ sub test_page {
             }
             my $lint = new HTML::Lint;
             isa_ok( $lint, "HTML::Lint" );
-
-            $lint->parse($return->{'content'});
+            # will result in "Parsing of undecoded UTF-8 will give garbage when decoding entities..." otherwise
+            my $content = decode_utf8($return->{'content'});
+            $lint->parse($content);
             my @errors = $lint->errors;
             @errors = diag_lint_errors_and_remove_some_exceptions($lint);
             is( scalar @errors, 0, "No errors found in HTML" );
@@ -233,8 +273,10 @@ sub test_page {
 
     # check for missing images / css or js
     if($content_type =~ 'text\/html') {
-        my @matches1 = $return->{'content'} =~ m/\s+(src|href)='(.+?)'/gi;
-        my @matches2 = $return->{'content'} =~ m/\s+(src|href)="(.+?)"/gi;
+        my $content = $return->{'content'};
+        $content =~ s/<script[^>]*>.*?<\/script>//gsmxi;
+        my @matches1 = $content =~ m/\s+(src|href)='(.+?)'/gi;
+        my @matches2 = $content =~ m/\s+(src|href)="(.+?)"/gi;
         my $links_to_check;
         my $x=0;
         for my $match (@matches1, @matches2) {
@@ -251,6 +293,7 @@ sub test_page {
             next if $match =~ m|^/thruk/frame\.html| and defined $ENV{'CATALYST_SERVER'};
             next if $match =~ m/"\s*\+\s*icon\s*\+\s*"/;
             next if $match =~ m/\/"\+/;
+            next if $match =~ m/data:image\/png;base64/;
             $match =~ s/"\s*\+\s*url_prefix\s*\+\s*"/\//gmx;
             $match =~ s/"\s*\+\s*theme\s*\+\s*"/Thruk/gmx;
             $links_to_check->{$match} = 1;
@@ -258,6 +301,7 @@ sub test_page {
         my $errors = 0;
         for my $test_url (keys %{$links_to_check}) {
             next if $test_url =~ m/\/pnp4nagios\//mx;
+            next if $test_url =~ m|/thruk/themes/.*?/images/logos/|mx;
             if($test_url !~ m/^(http|\/)/gmx) { $test_url = _relative_url($test_url, $request->base()->as_string()); }
             my $request = _request($test_url);
 
@@ -278,6 +322,11 @@ sub test_page {
         is( $errors, 0, 'All stylesheets, images and javascript exist' );
     }
 
+    # sleep after the request?
+    if(defined $opts->{'sleep'}) {
+        ok(sleep($opts->{'sleep'}), "slept $opts->{'sleep'} seconds");
+    }
+
     return $return;
 }
 
@@ -287,10 +336,36 @@ sub diag_lint_errors_and_remove_some_exceptions {
     my @return;
     for my $error ( $lint->errors ) {
         my $err_str = $error->as_string;
-        next if $err_str =~ m/<IMG\ SRC="\/thruk\/.*?">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*command.png">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*warning.png">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*unknown.png">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*critical.png">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*flapping.gif">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*recovery.png">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*restart.gif">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*start.gif">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*icon_minimize\.gif">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*right\.png">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*left\.gif">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*right\.gif">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*up\.gif">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*down\.png">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*down\.gif">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*json\.png">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*waiting\.gif">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*downtime\.gif">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*info\.png">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*problem\.png">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*criticity_\d\.png">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*stop\.gif">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+
+        next if $err_str =~ m/<IMG\ SRC=".*\/conf\/images\/obj_.*">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC=".*\/logos\/.*">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
         next if $err_str =~ m/<IMG\ SRC="[^"]*\.cgi[^"]*">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
+        next if $err_str =~ m/<IMG\ SRC="data:image[^"]*">\ tag\ has\ no\ HEIGHT\ and\ WIDTH\ attributes/imx;
         next if $err_str =~ m/Unknown\ attribute\ "data\-\w+"\ for\ tag/imx;
         next if $err_str =~ m/Invalid\ character.*should\ be\ written\ as/imx;
+        next if $err_str =~ m/Unknown\ attribute\ "placeholder"\ for\ tag\ <input>/imx;
         diag($error->as_string."\n");
         push @return, $error;
     }
@@ -424,20 +499,29 @@ sub _relative_url {
     my $newloc = $url;
     $newloc    =~ s/^(.*\/).*$/$1/gmx;
     $newloc    .= $location;
+    while($newloc =~ s|/[^\/]+/\.\./|/|gmx) {}
     return $newloc;
 }
 
 #########################
 sub _request {
-    my $url     = shift;
+    my($url, $start_to) = @_;
     my $request = request($url);
     if($request->is_redirect and $request->{'_headers'}->{'location'} =~ m/\/startup\.html\?(.*)$/) {
-        diag("starting up... $1");
+        my $link = $1;
+        $link    =~ s/^wait\#//mx;
+        #diag("starting up... ".$link);
+        is($link, $start_to, "startup url points to: ".$link) if defined $start_to;
         # startup fcgid
-        my $r = request('/thruk/side.html');
+        my $r = request('/thruk/cgi-bin/remote.cgi');
+        #diag("startup request:");
+        #diag(Dumper($r));
         fail("startup failed: ".Dumper($r)) unless $r->is_success;
         fail("startup failed, no pid: ".Dumper($r)) unless -f '/var/cache/thruk/thruk.pid';
-        $request = request($url);
+        sleep(3);
+        $request = request($link);
+        #diag("original request:");
+        #diag(Dumper($request));
     }
     return $request;
 }
@@ -449,6 +533,23 @@ sub _set_test_page_defaults {
         $opts->{'unlike'} = [ 'internal server error', 'HASH', 'ARRAY' ];
     }
     return $opts;
+}
+
+#########################
+sub bail_out_req {
+    my($msg, $req) = @_;
+    my $page    = $req->content;
+    my $error   = "";
+    if($page =~ m/<!--error:(.*?):error-->/smx) {
+        $error = $1;
+        diag(Dumper($msg));
+        diag(Dumper($error));
+        BAIL_OUT($msg);
+    }
+    diag(Dumper($msg));
+    diag(Dumper($req));
+    BAIL_OUT($msg);
+    return;
 }
 
 #########################

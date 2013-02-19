@@ -1,13 +1,26 @@
-#!/bin/sh
-# read rc file if exists
-if [ -e ~/.thruk  ]; then
-    . ~/.thruk
+#!/bin/bash
+
+# read rc files if exist
+[ -e ~/.thruk   ] && . ~/.thruk
+[ -e ~/.profile ] && . ~/.profile
+
+if [ -e $(dirname $0)/../lib/Thruk.pm ]; then
+  export PERL5LIB="$PERL5LIB:$(dirname $0)/../lib";
+  if [ -z $CATALYST_CONFIG ]; then export CATALYST_CONFIG="$(dirname $0)/../"; fi
+elif [ ! -z $OMD_ROOT ]; then
+  export PERL5LIB=$OMD_ROOT/share/thruk/lib:$PERL5LIB
+  if [ -z $CATALYST_CONFIG ]; then export CATALYST_CONFIG="$OMD_ROOT/etc/thruk"; fi
+else
+  export PERL5LIB=$PERL5LIB:/usr/share/thruk/lib:/usr/lib/thruk/perl5;
+  if [ -z $CATALYST_CONFIG ]; then export CATALYST_CONFIG='/etc/thruk'; fi
 fi
+
 eval 'exec /usr/bin/perl -x $0 ${1+"$@"} ;'
     if 0;
 
 #! -*- perl -*-
 # vim: expandtab:ts=4:sw=4:syntax=perl
+#line 24
 
 use strict;
 use warnings;
@@ -15,19 +28,20 @@ use Getopt::Long;
 use Pod::Usage;
 use Thruk::Utils;
 
-our $VERSION = '1.52';
+our $VERSION = '1.64';
 my $branch   = '';
 $branch      = Thruk::Utils::get_git_name() unless $branch ne '';
 
 my $options = {
-    'verbose'  => 0,
+    'verbose'  => 1,
     'backends' => [],
 };
 Getopt::Long::Configure('no_ignore_case');
 Getopt::Long::Configure('bundling');
 GetOptions (
    "h|help"             => \$options->{'help'},
-   "v|verbose"          => \$options->{'verbose'},
+   "v|verbose"          => sub { $options->{'verbose'}++ },
+   "q|quiet"            => \$options->{'quiet'},
    "V|version"          => \$options->{'version'},
    "r|remote-url=s"     => \$options->{'remoteurl'},
      "local"            => \$options->{'local'},
@@ -36,12 +50,14 @@ GetOptions (
    "b|backend=s"        =>  $options->{'backends'},
    "A|auth=s"           => \$options->{'auth'},
    "a|action=s"         => \$options->{'action'},
+   "y|yes"              => \$options->{'yes'},
    "<>"                 => sub { $options->{'url'} = "".shift },
-) or pod2usage( { -verbose => 2, -message => 'error in options' } );
+) or pod2usage( { -verbose => 2, -exit => 3, -message => 'error in options' } );
 
 if($options->{'version'}) { print "Thruk Version $VERSION".($branch ne '' ? '~'.$branch : '')."\n"; exit 0; }
-pod2usage( { -verbose => 2, -exit => 1 } ) if $options->{'help'};
-pod2usage( { -verbose => 2, -exit => 1 } ) if !$options->{'action'} and !$options->{'url'} and !$options->{'listbackends'};
+pod2usage( { -verbose => 2, -exit => 3 } ) if $options->{'help'};
+pod2usage( { -verbose => 2, -exit => 3 } ) if !$options->{'action'} and !$options->{'url'} and !$options->{'listbackends'};
+$options->{'verbose'} = 0 if $options->{'quiet'};
 
 use Thruk::Utils::CLI;
 my $cli = Thruk::Utils::CLI->new($options);
@@ -57,19 +73,17 @@ thruk - Command Line Utility for Thruk Monitoring Gui
 
 =head1 SYNOPSIS
 
-Usage: thruk [options] | url]
+  Usage: thruk [options] | url]
 
-Options:
+  Options:
   -h, --help                    Show this help message and exit
   -v, --verbose                 Print verbose output
+  -V, --version                 Print version
 
   -b, --backend=<backend>       Comma seperated list of backends/sites
                                 which should be used for querys.
   -l, --list-backends           List available backends/sites.
-  -a, --action=<action>         Perform this action:
-                                  - url=<url>        output url result
-                                  - report=<nr>      generate report
-                                  - reportmail=<nr>  send report by mail
+  -a, --action=<action>         Perform given action. see below for a list.
 
   -A, --auth=<auth>             Set username for querys
 
@@ -78,6 +92,8 @@ Options:
                                 remote-url.
   -r, --remote-url=<url>        URL to remote installation.
       --local                   Don't try to connect fastcgi daemon first.
+
+  -y, --yes                     answer yes to all given questions.
 
 =head1 DESCRIPTION
 
@@ -99,6 +115,10 @@ script has the following arguments
 
     print verbose output too
 
+=item B<-V> , B<--version>
+
+    print version and exit
+
 =item B<-b> I<backend>, B<--backend>=I<backend>
 
     specify backend(s), otherwise the default backends will be
@@ -112,11 +132,27 @@ script has the following arguments
 =item B<-a> I<action>, B<--action>=I<action>
 
     perform selected action:
+      - url=<url>                   output url result
+      - report=<nr>                 generate report
+      - reportmail=<nr>             send report by mail
 
-    - url=<url>     request this url. Url can be shortened and the
-                    leading /thruk/cgi-bin/ can be stripped.
+    Mongodb Logcache:
+      - logcacheimport(=blocksize)  initial logcache import. Blocksize is in seconds. Defaults is one day.
+      - logcacheupdate              update logcache
+      - logcacheauthupdate          update logcache authorization information
+      - logcachestats               print logcache statistics
+      - logcacheclean(=days)        clean everything older than specified number of days. Default is one year.
 
-    - report=<nr>   generate report by specifying its id.
+    Internal Commands
+      - installcron                 update cronjobs for downtimes and reports
+                                    (only needed during package installation)
+      - uninstallcron               remove all thruk cronjobs
+                                    (only needed during package deinstallation)
+    Testing Commands
+      - listbackends                list all backends
+      - listhosts                   list hostnames
+      - listhostgroups              list hostgroupnames
+
 
 =item B<-A> I<authname>, B<--auth>=I<authname>
 
@@ -137,6 +173,10 @@ script has the following arguments
 
     Don't contact remote server. Normally remote-url is tried first for
     faster access.
+
+=item B<-y> , B<--yes>
+
+    answer yes to a given questions during commands.
 
 =back
 

@@ -15,7 +15,7 @@ use Storable qw/dclone/;
 use Data::Dumper;
 use File::Slurp;
 use Socket;
-use Encode qw(decode_utf8);
+use Encode qw(decode_utf8 encode_utf8);
 use Config::General qw(ParseConfig);
 use Digest::MD5 qw(md5_hex);
 
@@ -54,6 +54,7 @@ page: /thruk/cgi-bin/conf.cgi
 sub conf_cgi : Regex('thruk\/cgi\-bin\/conf\.cgi') {
     my ( $self, $c ) = @_;
     return if defined $c->{'canceled'};
+    $c->stash->{'config_backends_only'} = 1;
     return $c->detach('/conf/index');
 }
 
@@ -88,6 +89,9 @@ sub index :Path :Args(0) :MyAction('AddSafeDefaults') {
     $c->stash->{template}              = 'conf.tt';
     $c->stash->{subtitle}              = 'Config Tool';
     $c->stash->{infoBoxTitle}          = 'Config Tool';
+    $c->stash->{'last_changed'}        = 0;
+    $c->stash->{'needs_commit'}        = 0;
+
 
     Thruk::Utils::ssi_include($c);
 
@@ -123,12 +127,14 @@ sub index :Path :Args(0) :MyAction('AddSafeDefaults') {
 
     # show settings page
     if($subcat eq 'cgi') {
+        return if Thruk::Action::AddDefaults::die_when_no_backends($c);
         $self->_process_cgi_page($c);
     }
     elsif($subcat eq 'thruk') {
         $self->_process_thruk_page($c);
     }
     elsif($subcat eq 'users') {
+        return if Thruk::Action::AddDefaults::die_when_no_backends($c);
         $self->_process_users_page($c);
     }
     elsif($subcat eq 'plugins') {
@@ -153,7 +159,7 @@ sub index :Path :Args(0) :MyAction('AddSafeDefaults') {
 sub _process_json_page {
     my( $self, $c ) = @_;
 
-    return unless $self->_update_objects_config($c);
+    return unless Thruk::Utils::Conf::set_object_model($c);
 
     my $type = $c->{'request'}->{'parameters'}->{'type'} || 'hosts';
     $type    =~ s/s$//gmxo;
@@ -180,6 +186,12 @@ sub _process_json_page {
         my $themes_dir = $c->config->{'themes_path'} || $c->config->{'home'}."/themes";
         my $dir        = $c->config->{'physical_logo_path'} || $themes_dir."/themes-available/Thruk/images/logos";
         $dir =~ s/\/$//gmx;
+        if(!-d $dir.'/.') {
+            # try to create that folder, it might not exist yet
+            eval {
+                Thruk::Utils::IO::mkdir_r($dir);
+            };
+        }
         my $files = _find_files($c, $dir, '\.(png|gif|jpg)$');
         for my $file (@{$files}) {
             $file =~ s/$dir\///gmx;
@@ -217,7 +229,7 @@ sub _process_json_page {
             push @{$objects}, ('$ARG1$', '$ARG2$', '$ARG3$', '$ARG4$', '$ARG5$');
         }
         if(defined $c->{'request'}->{'parameters'}->{'withuser'}) {
-            my $user_macros = $c->{'db'}->_read_resource_file($c->{'obj_db'}->{'config'}->{'obj_resource_file'});
+            my $user_macros = Thruk::Utils::read_resource_file($c->{'obj_db'}->{'config'}->{'obj_resource_file'});
             push @{$objects}, keys %{$user_macros};
         }
         for my $type (qw/host service/) {
@@ -338,7 +350,7 @@ sub _process_json_page {
         }
     } else {
         for my $dat (@{$c->{'obj_db'}->get_objects_by_type($type)}) {
-            my $name = $use_long ? $dat->get_long_name() : $dat->get_name();
+            my $name = $use_long ? $dat->get_long_name(undef, '  -  ') : $dat->get_name();
             if(defined $name) {
                 push @{$objects}, $name
             } else {
@@ -498,7 +510,7 @@ sub _process_thruk_page {
 
         my $data = Thruk::Utils::Conf::get_data_from_param($c->{'request'}->{'parameters'}, $defaults);
         $self->_store_changes($c, $file, $data, $defaults, $c);
-        return $c->response->redirect('conf.cgi?sub=thruk');
+        return Thruk::Utils::restart_later($c, $c->stash->{url_prefix}.'thruk/cgi-bin/conf.cgi?sub=thruk');
     }
 
     my($content, $data, $md5) = Thruk::Utils::Conf::read_conf($file, $defaults);
@@ -540,8 +552,6 @@ sub _process_thruk_page {
                         show_full_commandline
                         shown_inline_pnp
                         show_modified_attributes
-                        statusmap_default_type
-                        statusmap_default_groupby
                         datetime_format
                         datetime_format_today
                         datetime_format_long
@@ -662,9 +672,16 @@ sub _process_users_page {
         $c->stash->{'has_contact'} = 0;
         my $contacts = $c->{'db'}->get_contacts( filter => [ Thruk::Utils::Auth::get_auth_filter( $c, 'contact' ), name => $name ] );
         if(defined $contacts and scalar @{$contacts} >= 1) {
-            $c->stash->{'has_contact'} = 1;
+            $c->stash->{'has_contact'}    = 1;
+            $c->stash->{'contact'}        = $contacts->[0];
         }
 
+        $c->stash->{'contact_groups'} = $c->{'db'}->get_contactgroups_by_contact($c, $name);
+        my($croles, $can_submit_commands, $calias, $roles_by_group)
+                = Thruk::Utils::get_dynamic_roles($c, $name);
+        $c->stash->{'contact_roles'}  = $croles;
+        $c->stash->{'contact_can_submit_commands'} = $can_submit_commands;
+        $c->stash->{'roles_by_group'} = $roles_by_group;
     }
 
     $c->stash->{'subtitle'} = "User Configuration";
@@ -690,7 +707,7 @@ sub _process_plugins_page {
 
     if($c->stash->{action} eq 'preview') {
         my $pic = $c->{'request'}->{'parameters'}->{'pic'} || die("missing pic");
-        if($pic !~ m/^[a-zA-Z_\ ]+$/gmx) {
+        if($pic !~ m/^[a-zA-Z0-9_\ ]+$/gmx) {
             die("unknown pic: ".$pic);
         }
         my $path = $plugin_available_dir.'/'.$pic.'/preview.png';
@@ -756,6 +773,14 @@ sub _process_backends_page {
 
     my $file = $c->config->{'Thruk::Plugin::ConfigTool'}->{'thruk'};
     return unless $file;
+    # non existing file gives readonly, so try to create it
+    if(!-e $file) {
+        open(my $fh, '>', $file);
+        if($fh) {
+            print $fh '';
+            Thruk::Utils::IO::close($fh, $file);
+        }
+    }
     $c->stash->{'readonly'} = (-w $file) ? 0 : 1;
 
     if($c->stash->{action} eq 'save') {
@@ -769,20 +794,25 @@ sub _process_backends_page {
         my $new = 0;
         while(defined $c->request->parameters->{'name'.$x}) {
             my $backend = {
-                'name'   => $c->request->parameters->{'name'.$x},
-                'type'   => $c->request->parameters->{'type'.$x},
-                'id'     => $c->request->parameters->{'id'.$x},
-                'hidden' => defined $c->request->parameters->{'hidden'.$x} ? $c->request->parameters->{'hidden'.$x} : 0,
-                'options' => {
-                    'peer'   => $c->request->parameters->{'peer'.$x},
-                },
+                'name'    => $c->request->parameters->{'name'.$x},
+                'type'    => $c->request->parameters->{'type'.$x},
+                'id'      => $c->request->parameters->{'id'.$x},
+                'hidden'  => defined $c->request->parameters->{'hidden'.$x} ? $c->request->parameters->{'hidden'.$x} : 0,
+                'section' => $c->request->parameters->{'section'.$x},
+                'options' => {},
             };
+            $backend->{'options'}->{'peer'}         = $c->request->parameters->{'peer'.$x}        if $c->request->parameters->{'peer'.$x};
+            $backend->{'options'}->{'auth'}         = $c->request->parameters->{'auth'.$x}        if $c->request->parameters->{'auth'.$x};
+            $backend->{'options'}->{'proxy'}        = $c->request->parameters->{'proxy'.$x}       if $c->request->parameters->{'proxy'.$x};
+            $backend->{'options'}->{'remote_name'}  = $c->request->parameters->{'remote_name'.$x} if $c->request->parameters->{'remote_name'.$x};
             $x++;
-            next unless defined $backend->{'name'};
-            next unless $backend->{'name'} ne '';
-            next unless defined $backend->{'options'}->{'peer'};
-            next unless $backend->{'options'}->{'peer'} ne '';
+            $backend->{'name'} = 'backend '.$x if(!$backend->{'name'} and $backend->{'options'}->{'peer'});
+            next unless $backend->{'name'};
             delete $backend->{'id'} if $backend->{'id'} eq '';
+
+            if($backend->{'options'}->{'peer'} and $backend->{'type'} eq 'livestatus' and $backend->{'options'}->{'peer'} =~ m/^\d+\.\d+\.\d+\.\d+$/mx) {
+                $backend->{'options'}->{'peer'} .= ':6557';
+            }
 
             # add values from existing backend config
             if(defined $backend->{'id'}) {
@@ -797,19 +827,26 @@ sub _process_backends_page {
         # put new one at the end
         if($new) { push(@{$backends}, shift(@{$backends})) }
         my $string    = Thruk::Utils::Conf::get_component_as_string($backends);
-        Thruk::Utils::Conf::replace_block($file, $string, '<Component\s+Thruk::Backend>', '<\/Component>');
+        Thruk::Utils::Conf::replace_block($file, $string, '<Component\s+Thruk::Backend>', '<\/Component>\s*');
         Thruk::Utils::set_message( $c, 'success_message', 'Backends changed successfully.' );
         return Thruk::Utils::restart_later($c, $c->stash->{url_prefix}.'thruk/cgi-bin/conf.cgi?sub=backends');
     }
     if($c->stash->{action} eq 'check_con') {
-        my $peer = $c->request->parameters->{'con'};
-        my $type = $c->request->parameters->{'type'};
+        my $peer        = $c->request->parameters->{'peer'};
+        my $type        = $c->request->parameters->{'type'};
+        my $auth        = $c->request->parameters->{'auth'};
+        my $proxy       = $c->request->parameters->{'proxy'};
+        my $remote_name = $c->request->parameters->{'remote_name'};
         my @test;
         eval {
-            my $con = Thruk::Backend::Manager->create_backend('test', $type, { peer => $peer});
-            @test   = $con->get_processinfo();
+            my $con = Thruk::Backend::Peer->new({
+                                                 type    => $type,
+                                                 name    => 'test connection',
+                                                 options => { peer => $peer, auth => $auth, proxy => $proxy, remote_name => $remote_name },
+                                                });
+            @test   = $con->{'class'}->get_processinfo();
         };
-        if(scalar @test == 2 and ref $test[0] eq 'HASH' and scalar keys %{$test[0]} == 1 and scalar keys %{$test[0]->{(keys %{$test[0]})[0]}} > 0) {
+        if(scalar @test >= 2 and ref $test[0] eq 'HASH' and scalar keys %{$test[0]} == 1 and scalar keys %{$test[0]->{(keys %{$test[0]})[0]}} > 0) {
             $c->stash->{'json'} = { ok => 1 };
         } else {
             my $error = $@;
@@ -824,7 +861,8 @@ sub _process_backends_page {
     my %conf;
     if(-f $file) {
         %conf = ParseConfig($file);
-    } else {
+    }
+    if(!defined $conf{'Component'}->{'Thruk::Backend'}) {
         $file =~ s/thruk_local\.conf/thruk.conf/mx;
         %conf = ParseConfig($file) if -f $file;
     }
@@ -838,11 +876,20 @@ sub _process_backends_page {
             }
         }
     }
+    if(scalar @{$backends} == 0) {
+        # add empty sample backend
+        push @{$backends}, { 'name' => '' };
+    }
     # set ids
     for my $b (@{$backends}) {
-        $b->{'key'}    = substr(md5_hex($b->{'options'}->{'peer'}." ".$b->{'name'}), 0, 5) unless defined $b->{'key'};
-        $b->{'addr'}   = $b->{'options'}->{'peer'};
-        $b->{'hidden'} = 0 unless defined $b->{'hidden'};
+        $b->{'key'}         = substr(md5_hex(($b->{'options'}->{'peer'} || '')." ".$b->{'name'}), 0, 5) unless defined $b->{'key'};
+        $b->{'addr'}        = $b->{'options'}->{'peer'}  || '';
+        $b->{'auth'}        = $b->{'options'}->{'auth'}  || '';
+        $b->{'proxy'}       = $b->{'options'}->{'proxy'} || '';
+        $b->{'remote_name'} = $b->{'options'}->{'remote_name'} || '';
+        $b->{'hidden'}      = 0 unless defined $b->{'hidden'};
+        $b->{'section'}     = '' unless defined $b->{'section'};
+        $b->{'type'}        = lc($b->{'type'});
     }
     $c->stash->{'sites'}    = $backends;
     $c->stash->{'subtitle'} = "Thruk Backends Manager";
@@ -856,10 +903,7 @@ sub _process_backends_page {
 sub _process_objects_page {
     my( $self, $c ) = @_;
 
-    $c->stash->{'last_changed'} = 0;
-    $c->stash->{'needs_commit'} = 0;
-
-    return unless $self->_update_objects_config($c);
+    return unless Thruk::Utils::Conf::set_object_model($c);
 
     _check_external_reload($c);
 
@@ -867,15 +911,16 @@ sub _process_objects_page {
     $c->stash->{'template'}        = 'conf_objects.tt';
     $c->stash->{'file_link'}       = "";
     $c->stash->{'coretype'}        = $c->{'obj_db'}->{'coretype'};
+    $c->stash->{'bare'}            = $c->{'request'}->{'parameters'}->{'bare'} || 0;
 
     # apply changes?
     if(defined $c->{'request'}->{'parameters'}->{'apply'}) {
-        return $self->_apply_config_changes($c);
+        return if $self->_apply_config_changes($c);
     }
 
     # tools menu
     if(defined $c->{'request'}->{'parameters'}->{'tools'}) {
-        return $self->_process_tools_page($c);
+        return if $self->_process_tools_page($c);
     }
 
     # get object from params
@@ -890,6 +935,16 @@ sub _process_objects_page {
         # save this object
         elsif($c->stash->{action} eq 'store') {
             return if $self->_object_save($c, $obj);
+        }
+
+        # disable this object temporarily
+        elsif($c->stash->{action} eq 'disable') {
+            return if $self->_object_disable($c, $obj);
+        }
+
+        # enable this object
+        elsif($c->stash->{action} eq 'enable') {
+            return if $self->_object_enable($c, $obj);
         }
 
         # delete this object
@@ -910,12 +965,12 @@ sub _process_objects_page {
 
         # list services for host
         elsif($c->stash->{action} eq 'listservices' and $obj->get_type() eq 'host') {
-            $self->_host_list_services($c, $obj);
+            return if $self->_host_list_services($c, $obj);
         }
 
         # list references
         elsif($c->stash->{action} eq 'listref') {
-            $self->_list_references($c, $obj);
+            return if $self->_list_references($c, $obj);
         }
     }
 
@@ -927,6 +982,16 @@ sub _process_objects_page {
     # browse files
     elsif($c->stash->{action} eq 'browser') {
         return if $self->_file_browser($c);
+    }
+
+    # object tree
+    elsif($c->stash->{action} eq 'tree') {
+        return if $self->_object_tree($c);
+    }
+
+    # object tree content
+    elsif($c->stash->{action} eq 'tree_objects') {
+        return if $self->_object_tree_objects($c);
     }
 
     # file editor
@@ -956,7 +1021,11 @@ sub _process_objects_page {
         $c->stash->{'data_name'}      = $obj->get_name();
         $c->stash->{'type'}           = $obj->get_type();
         $c->stash->{'used_templates'} = $obj->get_used_templates($c->{'obj_db'});
-        $c->stash->{'file_link'}      = $obj->{'file'}->{'path'} if defined $obj->{'file'};
+        # make sure object has either a real file or none
+        if(!defined $obj->{'file'} || !defined $obj->{'file'}->{'path'}) {
+            delete $obj->{'file'};
+        }
+        $c->stash->{'file_link'} = $obj->{'file'}->{'display'} if defined $obj->{'file'};
     }
 
     # set default type for start page
@@ -967,6 +1036,8 @@ sub _process_objects_page {
     $c->stash->{'needs_commit'}      = $c->{'obj_db'}->{'needs_commit'};
     $c->stash->{'last_changed'}      = $c->{'obj_db'}->{'last_changed'};
     $c->stash->{'obj_model_changed'} = 0 unless $c->{'request'}->{'parameters'}->{'refresh'};
+    $c->stash->{'referer'}           = $c->{'request'}->{'parameters'}->{'referer'} || '';
+    $c->{'obj_db'}->_reset_errors(1);
     return 1;
 }
 
@@ -981,10 +1052,23 @@ sub _apply_config_changes {
     $c->stash->{'output'}        = '';
     $c->stash->{'changed_files'} = $c->{'obj_db'}->get_changed_files();
 
+    if(defined $c->{'request'}->{'parameters'}->{'save_and_reload'}) {
+        if($c->{'obj_db'}->commit($c)) {
+            $c->{'request'}->{'parameters'}->{'reload'} = 'yes';
+        } else {
+            return $c->response->redirect('conf.cgi?sub=objects&apply=yes');
+        }
+    }
+
     # get diff of changed files
     if(defined $c->{'request'}->{'parameters'}->{'diff'}) {
+        $c->stash->{'output'} .= "<ul>\n";
         for my $file (@{$c->stash->{'changed_files'}}) {
-            $c->stash->{'output'} .= "<hr><pre>\n";
+            $c->stash->{'output'} .= "<li><a href='#".Thruk::Utils::Filter::name2id($file->{'display'})."'>".$file->{'display'}."</a></li>\n";
+        }
+        $c->stash->{'output'} .= "</ul>\n";
+        for my $file (@{$c->stash->{'changed_files'}}) {
+            $c->stash->{'output'} .= "<hr><a id='".Thruk::Utils::Filter::name2id($file->{'display'})."'></a><pre>\n";
             $c->stash->{'output'} .= Thruk::Utils::Filter::escape_html($file->diff());
             $c->stash->{'output'} .= "</pre><br>\n";
         }
@@ -1009,7 +1093,7 @@ sub _apply_config_changes {
         if(defined $c->stash->{'peer_conftool'}->{'obj_reload_cmd'}) {
             $c->stash->{'parse_errors'} = $c->{'obj_db'}->{'parse_errors'};
             Thruk::Utils::External::perl($c, { expr    => 'Thruk::Controller::conf::_config_reload($c)',
-                                               message => 'please stand by while configuration is beeing reloaded...'
+                                               message => 'please stand by while configuration is beeing reloaded...',
                                               }
                                         );
             return;
@@ -1020,7 +1104,7 @@ sub _apply_config_changes {
 
     # save changes to file
     elsif(defined $c->{'request'}->{'parameters'}->{'save'}) {
-        if($c->{'obj_db'}->commit()) {
+        if($c->{'obj_db'}->commit($c)) {
             Thruk::Utils::set_message( $c, 'success_message', 'Changes saved to disk successfully' );
         }
         return $c->response->redirect('conf.cgi?sub=objects&apply=yes');
@@ -1035,11 +1119,13 @@ sub _apply_config_changes {
         $c->{'stash'}->{'output'} =~ s/^\+(.*)$/<font color="green">+$1<\/font>/gmx;
     }
 
-    if($c->{'request'}->{'parameters'}->{'refresh'}) {
+    # discard changes
+    if($c->{'request'}->{'parameters'}->{'discard'}) {
+        $c->{'obj_db'}->discard_changes();
         Thruk::Utils::set_message( $c, 'success_message', 'Changes have been discarded' );
         return $c->response->redirect('conf.cgi?sub=objects&apply=yes');
     }
-    $c->stash->{'obj_model_changed'} = 0 unless $c->{'request'}->{'parameters'}->{'refresh'};
+    $c->stash->{'obj_model_changed'} = 0 unless ($c->{'request'}->{'parameters'}->{'refresh'} || $c->{'request'}->{'parameters'}->{'discard'});
     $c->stash->{'needs_commit'}      = $c->{'obj_db'}->{'needs_commit'};
     $c->stash->{'last_changed'}      = $c->{'obj_db'}->{'last_changed'};
     $c->stash->{'files'}             = $c->{'obj_db'}->get_files();
@@ -1160,14 +1246,6 @@ sub _cmd {
     return 1;
 }
 
-
-##########################################################
-sub _update_objects_config {
-    my ( $self, $c ) = @_;
-    return Thruk::Utils::Conf::set_object_model($c);
-}
-
-
 ##########################################################
 sub _find_files {
     my $c     = shift;
@@ -1190,7 +1268,7 @@ sub _get_context_object {
     $c->stash->{'data_id'}       = $c->{'request'}->{'parameters'}->{'data.id'}    || '';
     $c->stash->{'file_name'}     = $c->{'request'}->{'parameters'}->{'file'};
     $c->stash->{'file_line'}     = $c->{'request'}->{'parameters'}->{'line'};
-    $c->stash->{'data_name'}     =~ s/^(.*)\ \-\ .*$/$1/gmx;
+    $c->stash->{'data_name'}     =~ s/^(.*)\ \ \-\ \ .*$/$1/gmx;
     $c->stash->{'type'}          = lc $c->stash->{'type'};
     $c->stash->{'show_object'}   = 0;
     $c->stash->{'show_secondary_select'} = 0;
@@ -1226,12 +1304,18 @@ sub _get_context_object {
         $obj = Monitoring::Config::Object->new( type     => $c->stash->{'type'},
                                                 coretype => $c->{'obj_db'}->{'coretype'},
                                               );
-        my $files_root = $self->_set_files_stash($c);
+        my $files_root = $c->{'obj_db'}->get_files_root();
+        if($files_root eq '') {
+            $c->stash->{'new_file'} = '';
+            Thruk::Utils::set_message( $c, 'fail_message', 'Failed to create new file: please set at least one directory in your obj config.' );
+            return $obj;
+        }
         my $new_file   = $c->{'request'}->{'parameters'}->{'data.file'} || '';
-        $new_file      =~ s/^\///gmx;
-        my $file       = $c->{'obj_db'}->get_file_by_path($files_root.$new_file);
+        my $fullpath   = $files_root.'/'.$new_file;
+        $fullpath      =~ s|\/+|\/|gmx;
+        my $file       = $c->{'obj_db'}->get_file_by_path($fullpath);
         if(defined $file) {
-            if(defined $file and $file->{'readonly'}) {
+            if(defined $file and $file->readonly()) {
                 Thruk::Utils::set_message( $c, 'fail_message', 'File matches readonly pattern' );
                 $c->stash->{'new_file'} = '/'.$new_file;
                 return $obj;
@@ -1239,8 +1323,13 @@ sub _get_context_object {
             $obj->{'file'} = $file;
         } else {
             # new file
-            my $file = Monitoring::Config::File->new($files_root.$new_file, $c->{'obj_db'}->{'config'}->{'obj_readonly'}, $c->{'obj_db'}->{'coretype'});
-            if(defined $file and $file->{'readonly'}) {
+            my $remotepath = $fullpath;
+            my $localpath  = $remotepath;
+            if($c->{'obj_db'}->is_remote()) {
+                $localpath  = $c->{'obj_db'}->{'config'}->{'localdir'}.'/'.$localpath;
+            }
+            my $file = Monitoring::Config::File->new($localpath, $c->{'obj_db'}->{'config'}->{'obj_readonly'}, $c->{'obj_db'}->{'coretype'}, undef, $remotepath);
+            if(defined $file and $file->readonly()) {
                 Thruk::Utils::set_message( $c, 'fail_message', 'Failed to create new file: file matches readonly pattern' );
                 $c->stash->{'new_file'} = '/'.$new_file;
                 return $obj;
@@ -1265,7 +1354,7 @@ sub _get_context_object {
     }
 
     # link from file to an object?
-    if(!defined $obj && defined $c->stash->{'file_name'} && defined $c->stash->{'file_line'}) {
+    if(!defined $obj && defined $c->stash->{'file_name'} && defined $c->stash->{'file_line'} and $c->stash->{'file_line'} =~ m/^\d+$/mx) {
         $obj = $c->{'obj_db'}->get_object_by_location($c->stash->{'file_name'}, $c->stash->{'file_line'});
         unless(defined $obj) {
             Thruk::Utils::set_message( $c, 'fail_message', 'No such object found in this file' );
@@ -1330,19 +1419,34 @@ sub _files_to_path {
     my $files  = shift;
     my $folder = { 'dirs' => {}, 'files' => {}, 'path' => '', 'date' => '' };
 
+    my $ro_pattern = $c->{'obj_db'}->{'config'}->{'obj_readonly'};
+    $ro_pattern = [] unless defined $ro_pattern;
+    if(ref $ro_pattern eq '') { $ro_pattern = [$ro_pattern]; }
+
     for my $file (@{$files}) {
-        my @parts    = split(/\//mx, $file->{'path'});
+        my @parts    = split(/\//mx, $file->{'display'});
         my $filename = pop @parts;
         my $subdir = $folder;
         for my $dir (@parts) {
             $dir = $dir."/";
-            my @stat = stat($subdir->{'path'}.$dir);
-            $subdir->{'dirs'}->{$dir} = {
-                                         'dirs'  => {},
-                                         'files' => {},
-                                         'path'  => $subdir->{'path'}.$dir,
-                                         'date'  => Thruk::Utils::Filter::date_format($c, $stat[9]),
-                                        } unless defined $subdir->{'dirs'}->{$dir};
+            unless(defined $subdir->{'dirs'}->{$dir}) {
+                my $readonly = 0;
+                my $fulldir = $subdir->{'path'}.$dir;
+                for my $p (@{$ro_pattern}) {
+                    if($fulldir =~ m/$p/mx) {
+                        $readonly = 1;
+                        last;
+                    }
+                }
+                my @stat = stat($fulldir);
+                $subdir->{'dirs'}->{$dir} = {
+                                             'dirs'     => {},
+                                             'files'    => {},
+                                             'path'     => $fulldir,
+                                             'date'     => Thruk::Utils::Filter::date_format($c, $stat[9]),
+                                             'readonly' => $readonly,
+                                            };
+            }
             $subdir = $subdir->{'dirs'}->{$dir};
         }
         $subdir->{'files'}->{$filename} = {
@@ -1363,21 +1467,32 @@ sub _files_to_path {
 
 ##########################################################
 sub _set_files_stash {
-    my $self = shift;
-    my $c    = shift;
+    my($self, $c, $skip_readonly_files) = @_;
 
     my $all_files  = $c->{'obj_db'}->get_files();
     my $files_tree = $self->_files_to_path($c, $all_files);
     my $files_root = $files_tree->{'path'};
     my @filenames;
     for my $file (@{$all_files}) {
-        my $filename = $file->{'path'};
+        next if($skip_readonly_files and $file->{'readonly'});
+        my $filename = $file->{'display'};
         $filename    =~ s/^$files_root/\//gmx;
         push @filenames, $filename;
     }
 
-    $c->stash->{'filenames_json'} = encode_json([{ name => 'files', data => [ sort @filenames ]}]);
-    $c->stash->{'files_json'}     = encode_json($files_tree);
+    # file root is empty when there are no files (yet)
+    if($files_root eq '') {
+        my $dirs = Thruk::Utils::list($c->{'obj_db'}->{'config'}->{'obj_dir'});
+        if(defined $dirs->[0]) {
+            $files_root = $dirs->[0];
+            $files_root =~ s/\/*$//gmx;
+            $files_root = $files_root.'/';
+        }
+    }
+
+    # no encoding here, filenames are encoded already
+    $c->stash->{'filenames_json'} = JSON::XS->new->encode([{ name => 'files', data => [ sort @filenames ]}]);
+    $c->stash->{'files_json'}     = JSON::XS->new->encode($files_tree);
     return $files_root;
 }
 
@@ -1403,6 +1518,32 @@ sub _object_revert {
             Thruk::Utils::set_message( $c, 'success_message', ucfirst($obj->get_type()).' reverted successfully' );
         }
     }
+
+    return $c->response->redirect('conf.cgi?sub=objects&data.id='.$obj->get_id());
+}
+
+##########################################################
+sub _object_disable {
+    my($self, $c, $obj) = @_;
+
+    my $id = $obj->get_id();
+    $obj->{'disabled'}               = 1;
+    $obj->{'file'}->{'changed'}      = 1;
+    $c->{'obj_db'}->{'needs_commit'} = 1;
+    Thruk::Utils::set_message( $c, 'success_message', ucfirst($obj->get_type()).' disabled successfully' );
+
+    return $c->response->redirect('conf.cgi?sub=objects&data.id='.$obj->get_id());
+}
+
+##########################################################
+sub _object_enable {
+    my($self, $c, $obj) = @_;
+
+    my $id = $obj->get_id();
+    $obj->{'disabled'}               = 0;
+    $obj->{'file'}->{'changed'}      = 1;
+    $c->{'obj_db'}->{'needs_commit'} = 1;
+    Thruk::Utils::set_message( $c, 'success_message', ucfirst($obj->get_type()).' enabled successfully' );
 
     return $c->response->redirect('conf.cgi?sub=objects&data.id='.$obj->get_id());
 }
@@ -1447,15 +1588,26 @@ sub _object_save {
 
     # only save or continue to raw edit?
     if(defined $c->{'request'}->{'parameters'}->{'send'} and $c->{'request'}->{'parameters'}->{'send'} eq 'raw edit') {
-        return $c->response->redirect('conf.cgi?sub=objects&action=editor&file='.$obj->{'file'}->{'path'}.'&line='.$obj->{'line'}.'&data.id='.$obj->get_id().'&back=edit');
+        return $c->response->redirect('conf.cgi?sub=objects&action=editor&file='.encode_utf8($obj->{'file'}->{'display'}).'&line='.$obj->{'line'}.'&data.id='.$obj->get_id().'&back=edit');
     } else {
         if(scalar @{$obj->{'file'}->{'errors'}} > 0) {
-            Thruk::Utils::set_message( $c, 'fail_message', ucfirst($c->stash->{'type'}).' saved with errors', $obj->{'file'}->{'errors'} );
+            Thruk::Utils::set_message( $c, 'fail_message', ucfirst($c->stash->{'type'}).' changed with errors', $obj->{'file'}->{'errors'} );
             return; # return, otherwise details would not be displayed
         } else {
-            Thruk::Utils::set_message( $c, 'success_message', ucfirst($c->stash->{'type'}).' saved successfully' );
+            # does the object have a name?
+            if(!defined $c->stash->{'data_name'} or $c->stash->{'data_name'} eq '') {
+                $obj->set_name('undefined');
+                $c->{'obj_db'}->_rebuild_index();
+                Thruk::Utils::set_message( $c, 'fail_message', ucfirst($c->stash->{'type'}).' changed without a name' );
+            } else {
+                Thruk::Utils::set_message( $c, 'success_message', ucfirst($c->stash->{'type'}).' changed successfully' );
+            }
         }
-        return $c->response->redirect('conf.cgi?sub=objects&data.id='.$obj->get_id());
+        if($c->{'request'}->{'parameters'}->{'referer'}) {
+            return $c->response->redirect($c->{'request'}->{'parameters'}->{'referer'});
+        } else {
+            return $c->response->redirect('conf.cgi?sub=objects&data.id='.$obj->get_id());
+        }
     }
 
     return;
@@ -1467,7 +1619,7 @@ sub _object_move {
     my $c    = shift;
     my $obj  = shift;
 
-    my $files_root = $self->_set_files_stash($c);
+    my $files_root = $self->_set_files_stash($c, 1);
     if($c->stash->{action} eq 'movefile') {
         my $new_file = $c->{'request'}->{'parameters'}->{'newfile'};
         $new_file    =~ s/^\///gmx;
@@ -1493,9 +1645,11 @@ sub _object_clone {
     my $c    = shift;
     my $obj  = shift;
 
-    my $files_root          = $self->_set_files_stash($c);
-    $c->stash->{'new_file'} = $obj->{'file'}->{'path'};
+    my $files_root          = $self->_set_files_stash($c, 1);
+    $c->stash->{'new_file'} = $obj->{'file'}->{'display'};
     $c->stash->{'new_file'} =~ s/^$files_root/\//gmx;
+    # if cloned from a readonly file, keep new_file empty
+    if($obj->{'file'}->{'readonly'}) { $c->stash->{'new_file'} = ''; }
     $obj = Monitoring::Config::Object->new(type     => $obj->get_type(),
                                            conf     => $obj->{'conf'},
                                            coretype => $c->{'obj_db'}->{'coretype'});
@@ -1508,7 +1662,7 @@ sub _object_new {
     my $self = shift;
     my $c    = shift;
 
-    $self->_set_files_stash($c);
+    $self->_set_files_stash($c, 1);
     $c->stash->{'new_file'} = '';
     my $obj = Monitoring::Config::Object->new(type     => $c->stash->{'type'},
                                               name     => $c->stash->{'data_name'},
@@ -1582,9 +1736,9 @@ sub _file_save {
     if(defined $file) {
         $lastobj = $file->update_objects_from_text($content, $lastline);
         $c->{'obj_db'}->_rebuild_index();
-        my $files_root                   = $self->_set_files_stash($c);
+        my $files_root                   = $self->_set_files_stash($c, 1);
         $c->{'obj_db'}->{'needs_commit'} = 1;
-        $c->stash->{'file_name'}         = $file->{'path'};
+        $c->stash->{'file_name'}         = $file->{'display'};
         $c->stash->{'file_name'}         =~ s/^$files_root//gmx;
         if(scalar @{$file->{'errors'}} > 0) {
             Thruk::Utils::set_message( $c,
@@ -1602,7 +1756,7 @@ sub _file_save {
     if(defined $lastobj) {
         return $c->response->redirect('conf.cgi?sub=objects&data.id='.$lastobj->get_id());
     }
-    return $c->response->redirect('conf.cgi?sub=objects&action=browser#'.$file->{'path'});
+    return $c->response->redirect('conf.cgi?sub=objects&action=browser#'.$file->{'display'});
 }
 
 ##########################################################
@@ -1617,17 +1771,16 @@ sub _file_editor {
         $c->stash->{'file'}          = $file;
         $c->stash->{'line'}          = $c->{'request'}->{'parameters'}->{'line'} || 1;
         $c->stash->{'back'}          = $c->{'request'}->{'parameters'}->{'back'} || '';
-        $c->stash->{'file_link'}     = $file->{'path'};
-        $c->stash->{'file_name'}     = $file->{'path'};
+        $c->stash->{'file_link'}     = $file->{'display'};
+        $c->stash->{'file_name'}     = $file->{'display'};
         $c->stash->{'file_name'}     =~ s/^$files_root//gmx;
-        $c->stash->{'file_content'}  = $file->_get_new_file_content();
+        $c->stash->{'file_content'}  = decode_utf8($file->get_new_file_content());
         $c->stash->{'template'}      = 'conf_objects_fileeditor.tt';
     } else {
         Thruk::Utils::set_message( $c, 'fail_message', 'File does not exist' );
     }
     return;
 }
-
 
 ##########################################################
 sub _file_browser {
@@ -1636,6 +1789,72 @@ sub _file_browser {
 
     $self->_set_files_stash($c);
     $c->stash->{'template'} = 'conf_objects_filebrowser.tt';
+    return;
+}
+
+##########################################################
+sub _object_tree {
+    my($self, $c) = @_;
+
+    # create list of templates
+    for my $type (qw/host service contact/) {
+        my $templates = {};
+        my $objs = $c->{'obj_db'}->get_templates_by_type($type);
+        for my $o (@{$objs}) {
+            if(!defined $o->{'conf'}->{'use'}) {
+                $templates->{$o->get_template_name()} = $o;
+            } else {
+                for my $tname (@{$o->{'conf'}->{'use'}}) {
+                    my $t = $c->{'obj_db'}->get_template_by_name($type, $tname);
+                    $t->{'child_templates'} = {} unless defined $t->{'child_templates'};
+                    $t->{'child_templates'}->{$o->get_template_name()} = $o;
+                }
+            }
+        }
+        $c->stash->{$type.'templates'} = $templates;
+    }
+
+    $c->stash->{'template'} = 'conf_objects_tree.tt';
+    return;
+}
+
+##########################################################
+sub _object_tree_objects {
+    my($self, $c) = @_;
+
+    my $type     = $c->{'request'}->{'parameters'}->{'type'}     || '';
+    my $template = $c->{'request'}->{'parameters'}->{'template'};
+    my $origin   = $c->{'request'}->{'parameters'}->{'origin'};
+    my $objs = [];
+    if($type) {
+        my $filter;
+        if(defined $template) {
+            $filter = {};
+            $filter->{'use'} = $template
+        }
+        $objs = $c->{'obj_db'}->get_objects_by_type($type, $filter, $origin);
+        $c->stash->{'objects_type'} = $type;
+    } else {
+        $objs = $c->{'obj_db'}->get_objects();
+        $c->stash->{'objects_type'} = 'all';
+    }
+
+    # sort by name
+    @{$objs} = sort {uc($a->get_name()) cmp uc($b->get_name())} @{$objs};
+
+    $c->stash->{'tree_objects_layout'} = 'table';
+    if(defined $c->request->cookie('thruk_obj_layout')) {
+        $c->stash->{'tree_objects_layout'} = $c->request->cookie('thruk_obj_layout')->value();
+    }
+
+    my $all_files  = $c->{'obj_db'}->get_files();
+    my $files_tree = $self->_files_to_path($c, $all_files);
+    my $files_root = $files_tree->{'path'};
+    $c->stash->{'files_tree'} = $files_tree;
+    $c->stash->{'files_root'} = $files_root;
+
+    $c->stash->{'objects'}  = $objs;
+    $c->stash->{'template'} = 'conf_objects_tree_objects.tt';
     return;
 }
 
@@ -1653,16 +1872,41 @@ sub _host_list_services {
 ##########################################################
 sub _list_references {
     my($self, $c, $obj) = @_;
+
+    # references from other objects
     my $refs = $c->{'obj_db'}->get_references($obj);
-    my $data = {};
+    my $incoming = {};
     for my $type (keys %{$refs}) {
-        $data->{$type} = {};
+        $incoming->{$type} = {};
         for my $id (keys %{$refs->{$type}}) {
             my $obj = $c->{'obj_db'}->get_object_by_id($id);
-            $data->{$type}->{$obj->get_name()} = $id;
+            $incoming->{$type}->{$obj->get_name()} = $id;
         }
     }
-    $c->stash->{'data'}     = $data;
+
+    # references from this to other objects
+    my $outgoing = {};
+    my $resolved = $obj->get_resolved_config($c->{'obj_db'});
+    for my $attr (keys %{$resolved}) {
+        my $refs = $resolved->{$attr};
+        if(ref $refs eq '') { $refs = [$refs]; }
+        if(defined $obj->{'default'}->{$attr} && $obj->{'default'}->{$attr}->{'link'}) {
+            my $type = $obj->{'default'}->{$attr}->{'link'};
+            for my $r (@{$refs}) {
+                if($type eq 'command') { $r =~ s/\!.*$//mx; }
+                $outgoing->{$type}->{$r} = '';
+            }
+        }
+    }
+    # add used templates
+    if(defined $obj->{'conf'}->{'use'}) {
+        for my $t (@{$obj->{'conf'}->{'use'}}) {
+            $outgoing->{$obj->get_type()}->{$t} = '';
+        }
+    }
+
+    $c->stash->{'incoming'} = $incoming;
+    $c->stash->{'outgoing'} = $outgoing;
     $c->stash->{'template'} = 'conf_objects_listref.tt';
     return;
 }
@@ -1671,7 +1915,7 @@ sub _list_references {
 sub _get_plugins {
     my($self, $c) = @_;
 
-    my $user_macros = $c->{'db'}->_read_resource_file($c->{'obj_db'}->{'config'}->{'obj_resource_file'});
+    my $user_macros = Thruk::Utils::read_resource_file($c->{'obj_db'}->{'config'}->{'obj_resource_file'});
     my $objects         = {};
     for my $macro (keys %{$user_macros}) {
         my $dir = $user_macros->{$macro};
@@ -1704,13 +1948,15 @@ sub _set_plugins_for_directory {
 ##########################################################
 sub _get_plugin_help {
     my($self, $c, $name) = @_;
+    my $help = 'help is only available for plugins!';
+    return $help unless defined $name;
 
     my $cmd;
     my $plugins         = $self->_get_plugins($c);
     my $objects         = $c->{'obj_db'}->get_objects_by_name('command', $name);
     if(defined $objects->[0]) {
         my($file,$args) = split/\s+/mx, $objects->[0]->{'conf'}->{'command_line'}, 2;
-        my $user_macros = $c->{'db'}->_read_resource_file($c->{'obj_db'}->{'config'}->{'obj_resource_file'});
+        my $user_macros = Thruk::Utils::read_resource_file($c->{'obj_db'}->{'config'}->{'obj_resource_file'});
         ($file)         = $c->{'db'}->_get_replaced_string($file, $user_macros);
         if(-x $file and ( $file =~ m|/plugins/|mx or $file =~ m|/libexec/|mx)) {
             $cmd = $file;
@@ -1719,7 +1965,6 @@ sub _get_plugin_help {
     if(defined $plugins->{$name}) {
         $cmd = $plugins->{$name};
     }
-    my $help = 'help is only available for plugins!';
     if(defined $cmd) {
         eval {
             local $SIG{ALRM} = sub { die('alarm'); };
@@ -1736,8 +1981,11 @@ sub _get_plugin_help {
 sub _get_plugin_preview {
     my($self,$c,$command,$args,$host,$service) = @_;
 
+    my $output = 'plugin preview is only available for plugins!';
+    return $output unless defined $args;
+
     my $macros = $c->{'db'}->_get_macros({skip_user => 1, args => [split/\!/mx, $args]});
-    $macros    = $c->{'db'}->_read_resource_file($c->{'obj_db'}->{'config'}->{'obj_resource_file'}, $macros);
+    $macros    = Thruk::Utils::read_resource_file($c->{'obj_db'}->{'config'}->{'obj_resource_file'}, $macros);
 
     if(defined $host and $host ne '') {
         my $objects = $c->{'obj_db'}->get_objects_by_name('host', $host);
@@ -1746,7 +1994,7 @@ sub _get_plugin_preview {
         }
     }
 
-    if(defined $service and $service ne '') {
+    if(defined $service and $service ne '' and $service ne 'undefined') {
         my $objects = $c->{'obj_db'}->get_objects_by_name('service', $service, 0, 'ho:'.$host);
         if(defined $objects->[0]) {
             $macros = $objects->[0]->get_macros($c->{'obj_db'}, $macros);
@@ -1762,7 +2010,6 @@ sub _get_plugin_preview {
             ($cmd) = $c->{'db'}->_get_replaced_string($objects->[0]->{'conf'}->{'command_line'}, $macros);
         }
     }
-    my $output = 'plugin preview is only available for plugins!';
     if(defined $cmd) {
         eval {
             local $SIG{ALRM} = sub { die('alarm'); };
@@ -1778,8 +2025,11 @@ sub _get_plugin_preview {
 ##########################################################
 sub _config_check {
     my($c) = @_;
-    if(_cmd(undef, $c, $c->stash->{'peer_conftool'}->{'obj_check_cmd'})) {
-        Thruk::Utils::set_message( $c, 'success_message', 'config check successfully' );
+    if($c->{'obj_db'}->is_remote() and $c->{'obj_db'}->remote_config_check($c)) {
+        Thruk::Utils::set_message( $c, 'success_message', 'config check successfull' );
+    }
+    elsif(!$c->{'obj_db'}->is_remote() and _cmd(undef, $c, $c->stash->{'peer_conftool'}->{'obj_check_cmd'})) {
+        Thruk::Utils::set_message( $c, 'success_message', 'config check successfull' );
     } else {
         Thruk::Utils::set_message( $c, 'fail_message', 'config check failed!' );
     }
@@ -1794,16 +2044,23 @@ sub _config_check {
 ##########################################################
 sub _config_reload {
     my($c) = @_;
-    if(_cmd(undef, $c, $c->stash->{'peer_conftool'}->{'obj_reload_cmd'})) {
+
+    if($c->{'obj_db'}->is_remote() and $c->{'obj_db'}->remote_config_reload($c)) {
+        Thruk::Utils::set_message( $c, 'success_message', 'config reloaded successfully' );
+        $c->stash->{'last_changed'} = 0;
+        $c->stash->{'needs_commit'} = 0;
+    }
+    elsif(!$c->{'obj_db'}->is_remote() and _cmd(undef, $c, $c->stash->{'peer_conftool'}->{'obj_reload_cmd'})) {
         Thruk::Utils::set_message( $c, 'success_message', 'config reloaded successfully' );
         $c->stash->{'last_changed'} = 0;
         $c->stash->{'needs_commit'} = 0;
     } else {
         Thruk::Utils::set_message( $c, 'fail_message', 'config reload failed!' );
     }
+
     _nice_check_output($c);
 
-    # wait until core responds
+    # wait until core responds again
     for(1..30) {
         sleep(1);
         eval {
@@ -1811,6 +2068,9 @@ sub _config_reload {
         };
         last unless $@;
     }
+
+    # reload navigation, probably some names have changed
+    $c->stash->{'reload_nav'} = 1;
 
     $c->stash->{'obj_model_changed'} = 0 unless $c->{'request'}->{'parameters'}->{'refresh'};
     return;

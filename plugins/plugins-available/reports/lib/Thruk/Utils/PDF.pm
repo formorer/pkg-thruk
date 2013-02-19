@@ -376,6 +376,7 @@ sub get_events {
     }
 
     my $total_filter = Thruk::Utils::combine_filter('-and', \@filter);
+    $c->{'db'}->renew_logcache($c, 1);
     my $logs = $c->{'db'}->get_logs(filter => [$total_filter], sort => {'DESC' => 'time'});
     $c->stash->{'logs'} = $logs;
     return 1;
@@ -430,6 +431,7 @@ sub get_url {
         }
         if($Thruk::Utils::PDF::ctype eq 'text/html') {
             $result->{'result'} = _replace_css_and_images($result->{'result'});
+            $result->{'result'} = _replace_links($result->{'result'}, $url, $c->config->{'report_base_url'});
         }
         my $attachment = $c->stash->{'attachment'};
         open(my $fh, '>', $attachment);
@@ -943,6 +945,50 @@ sub _replace_css_and_images {
 }
 
 ##########################################################
+sub _replace_links {
+    my($text, $url, $baseurl) = @_;
+    return $text unless defined $baseurl;
+    $baseurl =~ s|/thruk/.*||gmx;
+    $baseurl =~ s|/$||gmx;
+    $baseurl .= '/thruk/cgi-bin/';
+    $text =~ s/(<a[^>]*href=)
+               ("|')
+               ([^'"]*)
+               ("|')
+               ([^>]*>)
+              /&_replace_link($baseurl,$1,$2,$3,$4,$5)/gemx;
+
+    $text =~ s/(<form[^>]*action=)
+               ("|')
+               ([^'"]*)
+               ("|')
+               ([^>]*>)
+              /&_replace_link($baseurl,$1,$2,$3,$4,$5)/gemx;
+
+    return $text;
+}
+
+##########################################################
+sub _replace_link {
+    my($baseurl,$a,$b,$url,$d,$e) = @_;
+    if(    $url !~ m|^\w+://|mx
+       and $url !~ m|^\#|mx
+       and $url !~ m|^mailto:|mx
+      ) {
+        # absolute url
+        if($url =~ m/^\//mx) {
+            $baseurl =~ s|/thruk/cgi\-bin/$||mx;
+            $url = $baseurl.$url;
+        }
+        # relative url
+        else {
+            $url = $baseurl.$url;
+        }
+    }
+    return $a.$b.$url.$d.$e;
+}
+
+##########################################################
 sub _replace_img {
     my($a,$b,$url,$d,$e) = @_;
     return "" if $url eq '';
@@ -956,8 +1002,8 @@ sub _replace_img {
         if($url =~ m|^\w+\.cgi|gmx) {
             $url = '/thruk/cgi-bin/'.$url;
         }
-        Thruk::Utils::CLI::_request_url($c, $url);
-        my $result = $ENV{'HTTP_RESULT'};
+        my @res = Thruk::Utils::CLI::_request_url($c, $url);
+        my $result = $res[1];
         my $text = "data:image/png;base64,".encode_base64($result->{'result'}, '');
         return $a.$b.$text.$d.$e;
     }
@@ -1037,7 +1083,7 @@ sub _read_static_content_file {
     if(-e $file) {
         return read_file($file);
     }
-    croak("_read_static_content_file($url) $file: $!");
+    croak("_read_static_content_file($url) $file: $!") if($ENV{'THRUK_SRC'} and $ENV{'THRUK_SRC'} eq 'TEST');
     return "";
 }
 
