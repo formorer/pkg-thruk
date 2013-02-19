@@ -1,3 +1,4 @@
+use_distribution_wkhtmltopdf
 0001-thruk.conf.patch
 0002-log4perl.conf.patch
 0004-thruk_fastcgi.pl.patch

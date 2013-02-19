@@ -1,0 +1,19 @@
+--- a/plugins/plugins-available/reports2/script/html2pdf.sh
++++ b/plugins/plugins-available/reports2/script/html2pdf.sh
+@@ -36,15 +36,12 @@
+ 
+ rm -f $OUTPUT
+ DISPLAY=:$DISP $WKHTMLTOPDF \
+-        --use-xserver \
+         -l \
+         $EXTRAOPTIONS \
+-        --image-quality 100 \
+-        --disable-smart-shrinking \
+         -s A4 \
+         -B 0mm -L 0mm -R 0mm -T 0mm \
+         "$INPUT" "$OUTPUT" 2>&1 | \
+-    grep -v 'QPixmap: Cannot create a QPixmap when no GUI is being used'
++	egrep -v '(QPixmap: Cannot create a QPixmap when no GUI is being used|ended with.*saved states)'
+ 
+ [ -e "$OUTPUT" ] || cat $TMPLOG
+ 
