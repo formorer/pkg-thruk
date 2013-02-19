@@ -42,7 +42,7 @@ case "$1" in
         setperm www-data www-data 0755 /var/lib/thruk
         setperm www-data www-data 0755 /var/cache/thruk
         setperm www-data www-data 0755 /var/log/thruk
-        setperm root www-data 0664 /etc/thruk/thruk_local.conf
+        setperm root www-data 0660 /etc/thruk/thruk_local.conf
         setperm root www-data 0664 /etc/thruk/cgi.cfg
 
         shopt -s nullglob
