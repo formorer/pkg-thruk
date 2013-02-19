@@ -1,1 +1,1 @@
-#extend-diff-ignore = "root/thruk/javascript/all_in_one-1.64.js"
+extend-diff-ignore = "root/thruk/javascript/all_in_one-1.64.js"
