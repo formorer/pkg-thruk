@@ -82,6 +82,8 @@ Depends: apache2,
          libpdf-reuse-perl,
          libwww-perl,
          logrotate,
+         wkhtmltopdf,
+         xvfb,
          ${misc:Depends},
          ${perl:Depends},
          ${shlibs:Depends}
